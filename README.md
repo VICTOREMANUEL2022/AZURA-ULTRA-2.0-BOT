@@ -1,4 +1,4 @@
-# 🌟 𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀 𝟐.𝟎 𝐁𝐎𝐓 🌟  
+# 🌟 victor Uruguay 𝟐.𝟎 𝐁𝐎𝐓 🌟  
 🔥 **El bot definitivo para grupos de WhatsApp con sistema RPG, administración avanzada y más.**  
 
 ≪━─━─━─━─◈─━─━─━─━≫  
@@ -35,6 +35,7 @@ Incluye **un sistema RPG**, herramientas de **moderación avanzada**, **minijueg
 ✔️ **Descubre todo en `.menugrupo`**  
 
 ⊱⋅ ──────────── ⋅⊰  
+📲 https://wa.me/59894393163
 📜 **Comandos principales**  
 🛠️ **Menú general:** `.menu`  
 🎭 **Menú RPG:** `.menurpg`  
@@ -63,7 +64,7 @@ Incluye **un sistema RPG**, herramientas de **moderación avanzada**, **minijueg
 ## 👑 **Creador y colaboradores**  
 
 💻 **𝐃𝐞𝐬𝐚𝐫𝐫𝐨𝐥𝐥𝐚𝐝𝐨𝐫 𝐩𝐫𝐢𝐧𝐜𝐢𝐩𝐚𝐥:**  
-- 👑 **Russell XZ** (Creador de Azura Ultra 2.0 Bot)  
+- 👑 **victor** (Creador de Azura Ultra 2.0 Bot)  
 
 🤖 **𝐂𝐨𝐥𝐚𝐛𝐨𝐫𝐚𝐝𝐨𝐫𝐞𝐬:**  
 - 🔹 [DIEGO-OFC](https://github.com/DIEGO-OFC)  
@@ -85,3 +86,5 @@ Si deseas contribuir al desarrollo del bot, reportar errores o sugerir mejoras, 
 ≪━─━─━─━─◈─━─━─━─━≫  
 ✧ » ◇ « ✧ » ✦ « ✧ » ◇ « ✧  
 ≪━─━─━─━─◈─━─━─━─━≫
+número del bot 
+https://wa.me/59894393163
