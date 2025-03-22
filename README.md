@@ -1,4 +1,4 @@
-# 🌟 𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀 𝟐.𝟎 𝐁𝐎𝐓 🌟  
+# 🌟 VÍCTOR 𝐔𝐋𝐓𝐑𝐀 𝟐.𝟎 𝐁𝐎𝐓 🌟  
 🔥 **El bot definitivo para grupos de WhatsApp con sistema RPG, administración avanzada y más.**  
 
 ≪━─━─━─━─◈─━─━─━─━≫  
@@ -85,3 +85,4 @@ Si deseas contribuir al desarrollo del bot, reportar errores o sugerir mejoras, 
 ≪━─━─━─━─◈─━─━─━─━≫  
 ✧ » ◇ « ✧ » ✦ « ✧ » ◇ « ✧  
 ≪━─━─━─━─◈─━─━─━─━≫
+TE SALUDA ATENTAMENTE EL BOT VÍCTOR-MD
