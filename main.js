@@ -1,49 +1,112 @@
+
 const fs = require("fs");
 const chalk = require("chalk");
 const { isOwner, setPrefix, allowedPrefixes } = require("./config");
 const axios = require("axios");
 const fetch = require("node-fetch");
-const FormData = require("form-data") 
-const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
+const FormData = require("form-data");
+// const { downloadContentFromMessage } = require("@whiskeysockets/baileys"); // ← ESM: reemplazado por helper dinámico
 const os = require("os");
 const { execSync } = require("child_process");
 const path = require("path");
 const { imageToWebp, videoToWebp, writeExifImg, writeExifVid, writeExif, toAudio } = require('./libs/fuctions');
+const activeSessions = new Set();
 const stickersDir = "./stickers";
 const stickersFile = "./stickers.json";
-global.zrapi = `ex-9bf9dc0318`
-//modos
-async function fetchJson(url, options = {}) {
-  const res = await fetch(url, options);
-  return res.json();
+
+// Parche ESM Baileys: helper para descargar media y obtener Buffer
+async function downloadMedia(node, type) {
+  const m = await import('@whiskeysockets/baileys');
+  const stream = await m.downloadContentFromMessage(node, type);
+  let buf = Buffer.alloc(0);
+  for await (const chunk of stream) buf = Buffer.concat([buf, chunk]);
+  return buf;
 }
-//modos
-// 📂 Crear la carpeta `stickers/` si no existe
-if (!fs.existsSync(stickersDir)) {
-    fs.mkdirSync(stickersDir, { recursive: true });
+
+function isUrl(string) {
+  const regex = /^(https?:\/\/[^\s]+)/g;
+  return regex.test(string);
 }
-if (!fs.existsSync(stickersFile)) {
-    fs.writeFileSync(stickersFile, JSON.stringify({}, null, 2));
+
+const filePath = path.resolve('./activossubbots.json');
+global.cachePlay10 = {}; // Guardará los datos de play10 por ID de mensaje
+// Crear archivo con estructura inicial si no existe
+if (!fs.existsSync(filePath)) {
+  const estructuraInicial = {
+    antilink: {}
+    // futuro: modoAdmins: {}, antiarabe: {}
+  };
+
+  fs.writeFileSync(filePath, JSON.stringify(estructuraInicial, null, 2));
+  console.log("✅ Archivo activossubbots.json creado correctamente.");
 }
+//retrimgir👇
+const rePath = path.resolve("./re.json");
+let comandosRestringidos = {};
+if (fs.existsSync(rePath)) {
+  try {
+    comandosRestringidos = JSON.parse(fs.readFileSync(rePath, "utf-8"));
+  } catch (e) {
+    console.error("❌ Error al leer re.json:", e);
+    comandosRestringidos = {};
+  }
+}
+//retringir 👆
+global.zrapi = `ex-9bf9dc0318`;
+global.generatingCode = false;
+
+if (!fs.existsSync(stickersDir)) fs.mkdirSync(stickersDir, { recursive: true });
+if (!fs.existsSync(stickersFile)) fs.writeFileSync(stickersFile, JSON.stringify({}, null, 2));
+//para los subot
+const rutaLista = path.join(__dirname, "listasubots.json");
+
+// Verificar y crear el archivo si no existe
+if (!fs.existsSync(rutaLista)) {
+  fs.writeFileSync(rutaLista, JSON.stringify([], null, 2));
+  console.log("✅ Archivo listasubots.json creado.");
+} else {
+  console.log("📂 Archivo listasubots.json ya existe.");
+}
+//para los subot
+const prefixPath = path.resolve("prefixes.json");
+
+// Crear archivo si no existe
+if (!fs.existsSync(prefixPath)) {
+  fs.writeFileSync(prefixPath, JSON.stringify({}, null, 2));
+  console.log("✅ prefixes.json creado correctamente.");
+} else {
+  console.log("✅ prefixes.json ya existe.");
+}
+//grupo subot
+const grupoPath = path.resolve("grupo.json");
+
+// Verifica si el archivo existe, si no lo crea vacío con estructura básica
+if (!fs.existsSync(grupoPath)) {
+  fs.writeFileSync(grupoPath, JSON.stringify({}, null, 2));
+  console.log("✅ grupo.json creado correctamente.");
+} else {
+  console.log("✅ grupo.json ya existe.");
+}
+//bienvemidad personalizada
+const welcomePath = path.join(__dirname, 'welcome.json');
+
+if (!fs.existsSync(welcomePath)) {
+  fs.writeFileSync(welcomePath, JSON.stringify({}, null, 2));
+  console.log("✅ Archivo welcome.json creado exitosamente.");
+}
+
+//grupo subot
 const rpgFile = "./rpg.json";
 if (!fs.existsSync(rpgFile)) {
-    const rpgDataInicial = {
-        usuarios: {},
-        tiendaMascotas: [],
-        tiendaPersonajes: [],
-        mercadoPersonajes: [] 
-    };
+    const rpgDataInicial = { usuarios: {}, tiendaMascotas: [], tiendaPersonajes: [], mercadoPersonajes: [] };
     fs.writeFileSync(rpgFile, JSON.stringify(rpgDataInicial, null, 2));
 }
-// Cargar datos del RPG
 let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
-// Función para guardar cambios en `rpg.json`
 function saveRpgData() {
     fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
 }
-// 🛠️ Ruta del archivo de configuración
+
 const configFilePath = "./config.json";
-// Función para leer el prefijo guardado
 function loadPrefix() {
     if (fs.existsSync(configFilePath)) {
         let configData = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
@@ -52,51 +115,41 @@ function loadPrefix() {
         global.prefix = ".";
     }
 }
-// Cargar el prefijo al iniciar el bot
 loadPrefix();
 console.log(`📌 Prefijo actual: ${global.prefix}`);
+
 const guarFilePath = "./guar.json";
-if (!fs.existsSync(guarFilePath)) {
-    fs.writeFileSync(guarFilePath, JSON.stringify({}, null, 2));
-}
-// Función para guardar multimedia en guar.json
+if (!fs.existsSync(guarFilePath)) fs.writeFileSync(guarFilePath, JSON.stringify({}, null, 2));
+
 function saveMultimedia(key, data) {
     let guarData = JSON.parse(fs.readFileSync(guarFilePath, "utf-8"));
     guarData[key] = data;
     fs.writeFileSync(guarFilePath, JSON.stringify(guarData, null, 2));
 }
-// Función para obtener la lista de multimedia guardado
 function getMultimediaList() {
     return JSON.parse(fs.readFileSync(guarFilePath, "utf-8"));
 }
-// Exportamos las funciones para usarlas en los comandos
-module.exports = {
-    saveMultimedia,
-    getMultimediaList
-};
-// Verificar si un prefijo es válido
 function isValidPrefix(prefix) {
     return typeof prefix === "string" && (prefix.length === 1 || (prefix.length > 1 && [...prefix].length === 1));
+}
+function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+async function fetchJson(url, options = {}) {
+    const res = await fetch(url, options);
+    return res.json();
 }
 async function remini(imageData, operation) {
     return new Promise(async (resolve, reject) => {
         const availableOperations = ["enhance", "recolor", "dehaze"];
-        if (!availableOperations.includes(operation)) {
-            operation = availableOperations[0]; // Usar "enhance" como operación por defecto
-        }
-
+        if (!availableOperations.includes(operation)) operation = availableOperations[0];
         const baseUrl = `https://inferenceengine.vyro.ai/${operation}.vyro`;
         const formData = new FormData();
-
-        formData.append("image", Buffer.from(imageData), { 
-            filename: "enhance_image_body.jpg", 
-            contentType: "image/jpeg" 
+        formData.append("image", Buffer.from(imageData), { filename: "enhance_image_body.jpg", contentType: "image/jpeg" });
+        formData.append("model_version", 1, {
+            "Content-Transfer-Encoding": "binary",
+            contentType: "multipart/form-data; charset=utf-8"
         });
-        formData.append("model_version", 1, { 
-            "Content-Transfer-Encoding": "binary", 
-            contentType: "multipart/form-data; charset=utf-8" 
-        });
-
         formData.submit({
             url: baseUrl,
             host: "inferenceengine.vyro.ai",
@@ -108,239 +161,2534 @@ async function remini(imageData, operation) {
                 "Accept-Encoding": "gzip"
             }
         }, function (err, res) {
-            if (err) {
-                reject(err);
-                return;
-            }
-
+            if (err) return reject(err);
             const chunks = [];
-            res.on("data", function (chunk) {
-                chunks.push(chunk);
-            });
-
-            res.on("end", function () {
-                resolve(Buffer.concat(chunks));
-            });
-
-            res.on("error", function (err) {
-                reject(err);
-            });
+            res.on("data", chunk => chunks.push(chunk));
+            res.on("end", () => resolve(Buffer.concat(chunks)));
+            res.on("error", reject);
         });
     });
 }
 async function isAdmin(sock, chatId, sender) {
     try {
         const groupMetadata = await sock.groupMetadata(chatId);
-        const admins = groupMetadata.participants
-            .filter(p => p.admin)
-            .map(p => p.id);
+        const admins = groupMetadata.participants.filter(p => p.admin).map(p => p.id);
         return admins.includes(sender.replace(/[^0-9]/g, '') + "@s.whatsapp.net");
     } catch (error) {
         console.error("⚠️ Error verificando administrador:", error);
         return false;
     }
 }
-
-// Guardar nuevo prefijo en el archivo de configuración
 function savePrefix(newPrefix) {
     global.prefix = newPrefix;
     fs.writeFileSync("./config.json", JSON.stringify({ prefix: newPrefix }, null, 2));
     console.log(chalk.green(`✅ Prefijo cambiado a: ${chalk.yellow.bold(newPrefix)}`));
 }
-
-// Función para verificar si una URL es válida
-function isUrl(url) {
-    try {
-        new URL(url);
-        return true;
-    } catch (error) {
-        return false;
-    }
-}
-function pickRandom(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
-
-async function handleCommand(sock, msg, command, args, sender) {
-sock.sendImageAsSticker = async (jid, path, quoted, options = {}) => {
-  let buff = Buffer.isBuffer(path) 
-    ? path 
-    : /^data:.*?\/.*?;base64,/i.test(path) 
-    ? Buffer.from(path.split`,`[1], 'base64') 
-    : /^https?:\/\//.test(path) 
-    ? await (await getBuffer(path)) 
-    : fs.existsSync(path) 
-    ? fs.readFileSync(path) 
-    : Buffer.alloc(0);
-
-  let buffer;
-  if (options && (options.packname || options.author)) {
-    buffer = await writeExifImg(buff, options);
-  } else {
-    buffer = await imageToWebp(buff);
-  }
-
-  await sock.sendMessage(jid, { sticker: { url: buffer }, ...options }, { 
-    quoted: quoted ? quoted : m, 
-    ephemeralExpiration: 24 * 60 * 100, 
-    disappearingMessagesInChat: 24 * 60 * 100
-  });
-  
-  return buffer;
-};
-    const lowerCommand = command.toLowerCase();
-    const text = args.join(" ");
-    global.viewonce = true; 
 async function handleDeletedMessage(sock, msg) {
     if (!global.viewonce) return;
     const chatId = msg.key.remoteJid;
     const deletedMessage = msg.message;
     if (deletedMessage) {
-        await sock.sendMessage(chatId, { 
-            text: `⚠️ *Mensaje eliminado reenviado:*\n\n${deletedMessage.conversation || deletedMessage.extendedTextMessage?.text || ''}` 
-        });
+        await sock.sendMessage(chatId, {
+            text: `⚠️ *Mensaje eliminado reenviado:*
 
+${deletedMessage.conversation || deletedMessage.extendedTextMessage?.text || ''}`
+        });
         if (deletedMessage.imageMessage) {
-            const imageBuffer = await downloadContentFromMessage(deletedMessage.imageMessage, 'image');
+            const imageBuffer = await downloadMedia(deletedMessage.imageMessage, 'image');
             await sock.sendMessage(chatId, { image: imageBuffer }, { quoted: msg });
         } else if (deletedMessage.audioMessage) {
-            const audioBuffer = await downloadContentFromMessage(deletedMessage.audioMessage, 'audio');
+            const audioBuffer = await downloadMedia(deletedMessage.audioMessage, 'audio');
             await sock.sendMessage(chatId, { audio: audioBuffer }, { quoted: msg });
         } else if (deletedMessage.videoMessage) {
-            const videoBuffer = await downloadContentFromMessage(deletedMessage.videoMessage, 'video');
-         await sock.sendMessage(chatId, { video: videoBuffer }, { quoted: msg });
+            const videoBuffer = await downloadMedia(deletedMessage.videoMessage, 'video');
+            await sock.sendMessage(chatId, { video: videoBuffer }, { quoted: msg });
         }
     }
 }
-sock.ev.on('messages.delete', (messages) => {
-    messages.forEach(async (msg) => {
-        await handleDeletedMessage(sock, msg);
-    });
-});
-    switch (lowerCommand) {
-case 'play1': {
-  // Envía la reacción para indicar que el comando se ha activado
-  await sock.sendMessage(msg.key.remoteJid, { react: { text: "🎶", key: msg.key } });
-  
-  try {
-    // Verifica que se haya ingresado el nombre de la canción (consulta)
-    if (!text || text.trim() === "") {
-      // Ejemplo de uso con el prefijo global
-      await sock.sendMessage(msg.key.remoteJid, { 
-        text: `⚠️ Escribe por favor el nombre de la canción.\nEjemplo: *${global.prefix}play1 Boza Yaya*` 
-      }, { quoted: msg });
-      return;
+function loadPlugins() {
+    const plugins = [];
+    const pluginDir = path.join(__dirname, 'plugins');
+    if (!fs.existsSync(pluginDir)) return plugins;
+    const files = fs.readdirSync(pluginDir).filter(f => f.endsWith('.js'));
+    for (const file of files) {
+        const plugin = require(path.join(pluginDir, file));
+        if (plugin && plugin.command) plugins.push(plugin);
     }
-    
-    // Llama a la API para buscar en YouTube
-    let play2 = await fetchJson(`https://carisys.online/api/pesquisas/youtube?query=${encodeURIComponent(text)}`);
-    
-    // Construye la URL de descarga del audio
-    const audioUrl = `https://carisys.online/api/downloads/youtube/mp3-2?url=${play2.resultado.url}`;
-    
-    // Descarga el audio usando fetch y conviértelo a buffer
-    const res = await fetch(audioUrl);
-    if (!res.ok) throw new Error("Error descargando audio");
-    const audioBuffer = await res.buffer();
-    
-    // Envía el audio descargado como buffer, especificando el mimetype y el nombre de archivo
-    await sock.sendMessage(msg.key.remoteJid, {
-      audio: audioBuffer,
-      fileName: play2.resultado.titulo + '.mp3',
-      mimetype: "audio/mpeg",
-      contextInfo: {
-        externalAdReply: {
-          title: play2.resultado.titulo,
-          body: "αʑυrα υℓτrα 2.0 вστ",
-          mediaType: 1,
-          reviewType: "PHOTO",
-          thumbnailUrl: play2.resultado.imagem,
-          showAdAttribution: true,
-          renderLargerThumbnail: true
+    return plugins;
+}
+
+const plugins = loadPlugins();
+
+async function handleCommand(sock, msg, command, args, sender) {
+    const lowerCommand = command.toLowerCase();
+    const text = args.join(" ");
+    global.viewonce = true;
+
+    sock.sendImageAsSticker = async (jid, path, quoted, options = {}) => {
+        let buff = Buffer.isBuffer(path)
+            ? path
+            : /^data:.*?\/.*?;base64,/i.test(path)
+                ? Buffer.from(path.split`,`[1], 'base64')
+                : /^https?:\/\//.test(path)
+                    ? await (await getBuffer(path))
+                    : fs.existsSync(path)
+                        ? fs.readFileSync(path)
+                        : Buffer.alloc(0);
+        let buffer;
+        if (options && (options.packname || options.author)) {
+            buffer = await writeExifImg(buff, options);
+        } else {
+            buffer = await imageToWebp(buff);
         }
-      }
+        await sock.sendMessage(jid, { sticker: { url: buffer }, ...options }, {
+            quoted: quoted ? quoted : msg,
+            ephemeralExpiration: 24 * 60 * 100,
+            disappearingMessagesInChat: 24 * 60 * 100
+        });
+        return buffer;
+    };
+
+    const plugin = plugins.find(p => p.command.includes(lowerCommand));
+    if (plugin) {
+        return plugin(msg, {
+            conn: sock,
+            text,
+            args,
+            command: lowerCommand,
+            usedPrefix: global.prefix
+        });
+    }
+
+    switch (lowerCommand) {
+
+        
+case "menuaudio": {
+    try {
+        // Reacción antes de enviar el menú
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: "📂", key: msg.key } 
+        });
+
+        // Verificar si el archivo guar.json existe
+        if (!fs.existsSync("./guar.json")) {
+            return sock.sendMessage(
+                msg.key.remoteJid,
+                { text: "❌ *Error:* No hay multimedia guardado aún. Usa `.guar` para guardar algo primero." },
+                { quoted: msg }
+            );
+        }
+
+        // Leer archivo guar.json
+        let guarData = JSON.parse(fs.readFileSync("./guar.json", "utf-8"));
+        
+        let listaMensaje = `┏━━━━━━━━━━━━━━━┓
+┃  📂 *MENÚ DE MULTIMEDIA*  
+┃  🔑 *Palabras Clave Guardadas*  
+┗━━━━━━━━━━━━━━━┛
+
+📌 *¿Cómo recuperar un archivo guardado?*  
+Usa el comando:  
+➡️ _${global.prefix}g palabra_clave_  
+( *o puedes solo escribirlas tambien y bot las envia tambien* ) 
+
+📂 *Lista de palabras clave guardadas:*  
+━━━━━━━━━━━━━━━━━━━\n`;
+
+        let claves = Object.keys(guarData);
+        
+        if (claves.length === 0) {
+            listaMensaje += "🚫 *No hay palabras clave guardadas.*\n";
+        } else {
+            claves.forEach((clave, index) => {
+                listaMensaje += `*${index + 1}.* ${clave}\n`;
+            });
+        }
+
+        listaMensaje += `\n━━━━━━━━━━━━━━━━━━━  
+📥 *Otros Comandos de Multimedia*  
+
+${global.prefix}guar → Guarda archivos con una clave.  
+${global.prefix}g → Recupera archivos guardados.  
+${global.prefix}kill → Elimina un archivo guardado.  
+
+💡 *Azura Ultra sigue mejorando. Pronto más funciones.*  
+⚙️ *Desarrollado por Russell xz* 🚀`;
+
+        // Enviar el menú con video como GIF
+        await sock.sendMessage2(msg.key.remoteJid,
+  {
+    image: { url: "https://cdn.russellxz.click/4eb44cfb.jpeg" }, 
+    caption: listaMensaje 
+  },
+  msg
+)
+    } catch (error) {
+        console.error("❌ Error al enviar el menú2:", error);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: "❌ *Ocurrió un error al mostrar el menú2. Inténtalo de nuevo.*" 
+        }, { quoted: msg });
+    }
+    break;
+}    
+       case 'nsfwwaifu': {
+  const chatId = msg.key.remoteJid;
+
+  // Reacción de carga
+  await sock.sendMessage(chatId, {
+    react: { text: '🔄', key: msg.key }
+  });
+
+  try {
+    const axios = require('axios');
+    // Llamada a la API
+    const res = await axios.get('https://api.waifu.pics/nsfw/waifu');
+    const imageUrl = res.data.url;
+
+    // Enviar la imagen
+    await sock.sendMessage(chatId, {
+      image: { url: imageUrl },
+      caption: '💖 Aquí tienes tu Waifu NSFW 💖'
     }, { quoted: msg });
-  } catch (error) {
-    console.log(error);
-    await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ Hubo un pequeño error :(" }, { quoted: msg });
+
+    // Reacción de éxito
+    await sock.sendMessage(chatId, {
+      react: { text: '✅', key: msg.key }
+    });
+
+  } catch (err) {
+    console.error('❌ Error en comando nsfwwaifu:', err);
+    await sock.sendMessage(chatId, {
+      text: '❌ No pude obtener una Waifu en este momento. Intenta más tarde.'
+    }, { quoted: msg });
+  }
+}
+break; 
+case 'pack2': {
+  const chatId = msg.key.remoteJid;
+
+  // URLs de ejemplo
+  const urls = [
+    'https://telegra.ph/file/c0da7289bee2d97048feb.jpg',
+    'https://telegra.ph/file/b8564166f9cac4d843db3.jpg',
+    'https://telegra.ph/file/6e1a6dcf1c91bf62d3945.jpg',
+    'https://telegra.ph/file/0224c1ecf6b676dda3ac0.jpg',
+    'https://telegra.ph/file/b71b8f04772f1b30355f1.jpg'
+  ];
+
+  // Función para elegir una URL al azar
+  const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const imageUrl = getRandom(urls);
+
+  try {
+    // Reacción de carga
+    await sock.sendMessage(chatId, {
+      react: { text: '🔄', key: msg.key }
+    });
+
+    // Enviar la imagen
+    await sock.sendMessage(chatId, {
+      image: { url: imageUrl },
+      caption: '🥵 Aquí tienes más pack 😏'
+    }, { quoted: msg });
+
+    // Reacción de éxito
+    await sock.sendMessage(chatId, {
+      react: { text: '✅', key: msg.key }
+    });
+
+  } catch (err) {
+    console.error('❌ Error en comando pack2:', err);
+    await sock.sendMessage(chatId, {
+      text: '❌ Ocurrió un error al enviar la imagen.'
+    }, { quoted: msg });
+  }
+}
+break;
+      
+case "modoadmins": {
+  try {
+    const chatId = msg.key.remoteJid;
+    const isGroup = chatId.endsWith("@g.us");
+    const senderId = msg.key.participant || msg.key.remoteJid;
+    const senderNum = senderId.replace(/[^0-9]/g, "");
+    const isBotMessage = msg.key.fromMe;
+
+    if (!isGroup) {
+      await sock.sendMessage(chatId, {
+        text: "❌ Este comando solo se puede usar en grupos."
+      }, { quoted: msg });
+      break;
+    }
+
+    // Obtener metadata del grupo
+    const metadata = await sock.groupMetadata(chatId);
+
+    // Buscar el participante exacto (ya sea @lid o número real)
+    const participant = metadata.participants.find(p => p.id === senderId);
+    const isAdmin = participant?.admin === "admin" || participant?.admin === "superadmin";
+    const isOwner = global.owner.some(([id]) => id === senderNum);
+
+    if (!isAdmin && !isOwner && !isBotMessage) {
+      await sock.sendMessage(chatId, {
+        text: "❌ Solo administradores o el owner pueden usar este comando."
+      }, { quoted: msg });
+      break;
+    }
+
+    const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+    const args = messageText.trim().split(" ").slice(1);
+
+    if (!["on", "off"].includes(args[0])) {
+      await sock.sendMessage(chatId, {
+        text: "✳️ Usa correctamente:\n\n.modoadmins on / off"
+      }, { quoted: msg });
+      break;
+    }
+
+    const fs = require("fs");
+    const path = require("path");
+    const activosPath = path.join(__dirname, "activos.json");
+    const activos = fs.existsSync(activosPath)
+      ? JSON.parse(fs.readFileSync(activosPath))
+      : {};
+
+    activos.modoAdmins = activos.modoAdmins || {};
+
+    if (args[0] === "on") {
+      activos.modoAdmins[chatId] = true;
+    } else {
+      delete activos.modoAdmins[chatId];
+    }
+
+    fs.writeFileSync(activosPath, JSON.stringify(activos, null, 2));
+
+    await sock.sendMessage(chatId, {
+      text: `👑 Modo admins *${args[0] === "on" ? "activado" : "desactivado"}* en este grupo.`
+    }, { quoted: msg });
+
+  } catch (err) {
+    console.error("❌ Error en modoadmins:", err);
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ Ocurrió un error al cambiar el modo admins."
+    }, { quoted: msg });
+  }
+  break;
+}
+case 'tourl': {
+    const fs = require('fs');
+    const path = require('path');
+    const FormData = require('form-data');
+    const axios = require('axios');
+    const ffmpeg = require('fluent-ffmpeg');
+    const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
+
+    const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+
+    const m = {
+        reply: (text) => sock.sendMessage(msg.key.remoteJid, { text }, { quoted: msg }),
+        react: (emoji) => sock.sendMessage(msg.key.remoteJid, { react: { text: emoji, key: msg.key } })
+    };
+
+    if (!quotedMsg) {
+        await m.reply('⚠️ *Responde a una imagen, video, sticker, nota de voz o audio para subirlo.*');
+        break;
+    }
+
+    await m.react('☁️');
+
+    let rawPath = null;
+    let finalPath = null;
+
+    try {
+        let typeDetected = null;
+        let mediaMessage = null;
+
+        if (quotedMsg.imageMessage) {
+            typeDetected = 'image';
+            mediaMessage = quotedMsg.imageMessage;
+        } else if (quotedMsg.videoMessage) {
+            typeDetected = 'video';
+            mediaMessage = quotedMsg.videoMessage;
+        } else if (quotedMsg.stickerMessage) {
+            typeDetected = 'sticker';
+            mediaMessage = quotedMsg.stickerMessage;
+        } else if (quotedMsg.audioMessage) {
+            typeDetected = 'audio';
+            mediaMessage = quotedMsg.audioMessage;
+        } else {
+            throw new Error('❌ Solo se permiten imágenes, videos, stickers, audios o notas de voz.');
+        }
+
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+        const originalMime =
+            typeDetected === 'sticker'
+                ? 'image/webp'
+                : (mediaMessage.mimetype || 'application/octet-stream');
+
+        const rawExt =
+            typeDetected === 'sticker'
+                ? 'webp'
+                : (originalMime.split('/')[1]?.split(';')[0] || 'bin');
+
+        rawPath = path.join(tmpDir, `${Date.now()}_input.${rawExt}`);
+
+        const stream = await downloadContentFromMessage(
+            mediaMessage,
+            typeDetected === 'sticker' ? 'sticker' : typeDetected
+        );
+
+        const writeStream = fs.createWriteStream(rawPath);
+        for await (const chunk of stream) {
+            writeStream.write(chunk);
+        }
+        writeStream.end();
+
+        await new Promise((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+        });
+
+        const stats = fs.statSync(rawPath);
+        const maxSize = 200 * 1024 * 1024;
+
+        if (stats.size > maxSize) {
+            fs.unlinkSync(rawPath);
+            rawPath = null;
+            throw new Error('⚠️ El archivo excede el límite de 200MB.');
+        }
+
+        finalPath = rawPath;
+        let finalMime = originalMime;
+        let finalName = path.basename(finalPath);
+
+        const isAudioToConvert =
+            typeDetected === 'audio' &&
+            ['ogg', 'm4a', 'mpeg'].includes(rawExt);
+
+        if (isAudioToConvert) {
+            finalPath = path.join(tmpDir, `${Date.now()}_converted.mp3`);
+
+            await new Promise((resolve, reject) => {
+                ffmpeg(rawPath)
+                    .audioCodec('libmp3lame')
+                    .toFormat('mp3')
+                    .on('end', resolve)
+                    .on('error', reject)
+                    .save(finalPath);
+            });
+
+            if (fs.existsSync(rawPath)) {
+                fs.unlinkSync(rawPath);
+                rawPath = null;
+            }
+
+            finalMime = 'audio/mpeg';
+            finalName = path.basename(finalPath);
+        }
+
+        const uploadToRussell = async (filePath) => {
+            const form = new FormData();
+            form.append('file', fs.createReadStream(filePath));
+
+            const res = await axios.post('https://cdn.russellxz.click/upload.php', form, {
+                headers: form.getHeaders()
+            });
+
+            if (!res.data || !res.data.url) {
+                throw new Error('No se pudo subir a CDN Russell.');
+            }
+
+            return res.data.url;
+        };
+
+        const uploadToAdoFiles = async (filePath, filename, mimetype) => {
+            const base64 = fs.readFileSync(filePath, { encoding: 'base64' });
+
+            const payload = {
+                filename,
+                data: base64,
+                mimetype,
+                expiration: 'never'
+            };
+
+            const res = await axios.post('https://cdn.adoolab.xyz/api/upload', payload, {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!res.data || !res.data.url) {
+                throw new Error('No se pudo subir a AdoFiles.');
+            }
+
+            return res.data.url;
+        };
+
+        const [russellRes, adoRes] = await Promise.allSettled([
+            uploadToRussell(finalPath),
+            uploadToAdoFiles(finalPath, finalName, finalMime)
+        ]);
+
+        const okRussell = russellRes.status === 'fulfilled' ? russellRes.value : null;
+        const okAdo = adoRes.status === 'fulfilled' ? adoRes.value : null;
+
+        if (!okRussell && !okAdo) {
+            const err1 = russellRes.status === 'rejected' ? russellRes.reason?.message : '';
+            const err2 = adoRes.status === 'rejected' ? adoRes.reason?.message : '';
+            throw new Error(`Fallaron ambos servicios.
+- RussellCDN: ${err1}
+- AdoFiles: ${err2}`);
+        }
+
+        let replyText = '✅ *Archivo subido exitosamente:*\n';
+
+        if (okRussell) {
+            replyText += `*CDN Russell:*
+${okRussell}
+
+`;
+        }
+
+        if (okAdo) {
+            replyText += `*AdoFiles:*
+${okAdo}
+
+`;
+        }
+
+        if (!okRussell && russellRes.status === 'rejected') {
+            replyText += `*CDN Russell Failed:* ${russellRes.reason?.message}
+`;
+        }
+
+        if (!okAdo && adoRes.status === 'rejected') {
+            replyText += `*AdoFiles Failed:* ${adoRes.reason?.message}
+`;
+        }
+
+        await m.reply(replyText.trim());
+        await m.react('✅');
+
+    } catch (err) {
+        await m.reply(`❌ *Error:* ${err.message}`);
+        await m.react('❌');
+    } finally {
+        try {
+            if (rawPath && fs.existsSync(rawPath)) fs.unlinkSync(rawPath);
+            if (finalPath && finalPath !== rawPath && fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+        } catch {}
+    }
+
+    break;
+}
+      
+case "modoprivado": {
+  try {
+    const senderNumber = (msg.key.participant || msg.key.remoteJid).replace(/[@:\-s.whatsapp.net]/g, "");
+    const isBotMessage = msg.key.fromMe;
+
+    if (!isOwner(senderNumber) && !isBotMessage) {
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: "❌ Este comando es solo para el *dueño del bot*."
+      }, { quoted: msg });
+      break;
+    }
+
+    const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+    const args = messageText.trim().split(" ").slice(1);
+
+    if (!["on", "off"].includes(args[0])) {
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: "✳️ Usa correctamente:\n\n.modoprivado on / off"
+      }, { quoted: msg });
+      break;
+    }
+
+    const fs = require("fs");
+    const path = require("path");
+    const activosPath = path.join(__dirname, "activos.json");
+    const activos = fs.existsSync(activosPath)
+      ? JSON.parse(fs.readFileSync(activosPath))
+      : {};
+
+    activos.modoPrivado = args[0] === "on";
+    fs.writeFileSync(activosPath, JSON.stringify(activos, null, 2));
+
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: `🔐 Modo privado *${args[0] === "on" ? "activado" : "desactivado"}*.`
+    }, { quoted: msg });
+
+  } catch (err) {
+    console.error("❌ Error en modoprivado:", err);
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ Ocurrió un error al activar el modo privado."
+    }, { quoted: msg });
   }
   break;
 }
       
+
+
+
+
 case 'tovideo': {
   const fs = require('fs');
   const path = require('path');
-  const ffmpeg = require('fluent-ffmpeg');
+  const axios = require('axios');
+  const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
+  const { spawn } = require('child_process');
+  const FormData = require('form-data');
+  const { promisify } = require('util');
+  const { pipeline } = require('stream');
+  const streamPipeline = promisify(pipeline);
+
+  // Validar que se responda a un sticker
+  const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.stickerMessage;
+  if (!quoted) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "⚠️ Responde a un sticker para convertirlo a video."
+    }, { quoted: msg });
+    break;
+  }
+
+  await sock.sendMessage(msg.key.remoteJid, {
+    react: { text: "⏳", key: msg.key }
+  });
 
   try {
-    // Verifica que se haya citado un sticker
-    let quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.stickerMessage;
-    if (!quoted) {
-      return sock.sendMessage(msg.key.remoteJid, { 
-        text: "⚠️ *Debes responder a un sticker para convertirlo en video.*" 
-      }, { quoted: msg });
-    }
+    const tmpDir = path.join(__dirname, 'tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
 
-    // Envía reacción inicial
-    await sock.sendMessage(msg.key.remoteJid, { 
-      react: { text: "⏳", key: msg.key } 
+    const inputPath = path.join(tmpDir, `${Date.now()}.webp`);
+    const outputPath = path.join(tmpDir, `${Date.now()}_out.mp4`);
+
+    // Descargar el sticker
+    const stream = await downloadContentFromMessage(quoted, 'sticker');
+    const writer = fs.createWriteStream(inputPath);
+    for await (const chunk of stream) writer.write(chunk);
+    writer.end();
+
+    // Subir a russell.click
+    const form = new FormData();
+    form.append("file", fs.createReadStream(inputPath));
+    const upload = await axios.post("https://cdn.russellxz.click/upload.php", form, {
+      headers: form.getHeaders()
     });
 
-    // Descarga el sticker
-    let stickerStream = await downloadContentFromMessage(quoted, "sticker");
-    let buffer = Buffer.alloc(0);
-    for await (const chunk of stickerStream) {
-      buffer = Buffer.concat([buffer, chunk]);
+    if (!upload.data?.url) throw new Error("No se pudo subir el sticker.");
+
+    // Pasar la URL a la API para convertir a video
+    const conv = await axios.get(`https://api.neoxr.eu/api/webp2mp4?url=${encodeURIComponent(upload.data.url)}&apikey=russellxz`);
+    const videoUrl = conv.data?.data?.url;
+    if (!videoUrl) throw new Error("No se pudo convertir el sticker a video.");
+
+    // Descargar el video convertido
+    const res = await axios.get(videoUrl, { responseType: 'stream' });
+    const tempMp4 = path.join(tmpDir, `${Date.now()}_orig.mp4`);
+    await streamPipeline(res.data, fs.createWriteStream(tempMp4));
+
+    // Convertir con ffmpeg para compatibilidad
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ['-i', tempMp4, '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', outputPath]);
+      ff.on('exit', code => code === 0 ? resolve() : reject(new Error("Error en ffmpeg")));
+    });
+
+    // Enviar el video final
+    await sock.sendMessage(msg.key.remoteJid, {
+      video: fs.readFileSync(outputPath),
+      mimetype: 'video/mp4',
+      caption: '✅ Sticker convertido a video.\n\n© Azura Ultra 2.0'
+    }, { quoted: msg });
+
+    fs.unlinkSync(inputPath);
+    fs.unlinkSync(tempMp4);
+    fs.unlinkSync(outputPath);
+
+    await sock.sendMessage(msg.key.remoteJid, {
+      react: { text: "✅", key: msg.key }
+    });
+
+  } catch (e) {
+    console.error(e);
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: `❌ *Error:* ${e.message}`
+    }, { quoted: msg });
+    await sock.sendMessage(msg.key.remoteJid, {
+      react: { text: "❌", key: msg.key }
+    });
+  }
+
+  break;
+}
+
+case 'carga': {
+  if (!isOwner) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "⛔ Este comando es solo para el Owner."
+    }, { quoted: msg });
+    break;
+  }
+
+  const fs = require('fs');
+  const { exec } = require('child_process');
+  const lastRestarterFile = "./lastRestarter.json";
+
+  // Verificar si existe el archivo; si no, crearlo.
+  if (!fs.existsSync(lastRestarterFile)) {
+    fs.writeFileSync(lastRestarterFile, JSON.stringify({ chatId: "" }, null, 2));
+  }
+
+  exec('git pull', (error, stdout, stderr) => {
+    if (error) {
+      sock.sendMessage(msg.key.remoteJid, {
+        text: `❌ Error al actualizar: ${error.message}`
+      }, { quoted: msg });
+      return;
     }
-    if (buffer.length === 0) {
-      return sock.sendMessage(msg.key.remoteJid, { 
-        text: "❌ *Error al procesar el sticker.*" 
+    const output = stdout || stderr;
+    if (output.includes("Already up to date")) {
+      sock.sendMessage(msg.key.remoteJid, {
+        text: `✅ Actualización completada: Ya está al día.`
+      }, { quoted: msg });
+    } else {
+      const message = `✅ Actualización completada:\n\n${output}\n\n🔄 Reiniciando el servidor...`;
+      
+      // Enviar reacción de reinicio
+      sock.sendMessage(msg.key.remoteJid, {
+        react: { text: "🔄", key: msg.key }
+      });
+      
+      // Enviar mensaje de notificación
+      sock.sendMessage(msg.key.remoteJid, {
+        text: message
+      }, { quoted: msg });
+      
+      // Guardar el chat del último restarter
+      fs.writeFileSync(lastRestarterFile, JSON.stringify({ chatId: msg.key.remoteJid }, null, 2));
+      
+      // Reiniciar el bot (asegúrate de usar un gestor de procesos que lo reactive)
+      setTimeout(() => {
+        process.exit(1);
+      }, 3000);
+    }
+  });
+  break;
+}
+        
+      
+case 'whatmusic': {
+    const fs = require('fs');
+    const path = require('path');
+    const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
+    const { promisify } = require('util');
+    const { pipeline } = require('stream');
+    const axios = require('axios');
+    const yts = require('yt-search');
+    const ffmpeg = require('fluent-ffmpeg');
+    const quAx = require('./libs/upload.js');
+
+    const streamPipeline = promisify(pipeline);
+
+    const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (!quotedMsg || (!quotedMsg.audioMessage && !quotedMsg.videoMessage)) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "✳️ Responde a un *audio* (MP3) o *video* (MP4) para identificar la canción."
+        }, { quoted: msg });
+        break;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, {
+        react: { text: '🔎', key: msg.key }
+    });
+
+    try {
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+
+        const fileExtension = quotedMsg.audioMessage ? 'mp3' : 'mp4';
+        const inputPath = path.join(tmpDir, `${Date.now()}_input.${fileExtension}`);
+
+        const stream = await downloadContentFromMessage(
+            quotedMsg.audioMessage || quotedMsg.videoMessage,
+            quotedMsg.audioMessage ? 'audio' : 'video'
+        );
+        const writable = fs.createWriteStream(inputPath);
+        for await (const chunk of stream) writable.write(chunk);
+        writable.end();
+
+        const uploadResponse = await quAx(inputPath);
+        if (!uploadResponse.status || !uploadResponse.result.url) throw new Error("No se pudo subir el archivo.");
+
+        const apiKey = "russellxz";
+        const apiUrl = `https://api.neoxr.eu/api/whatmusic?url=${encodeURIComponent(uploadResponse.result.url)}&apikey=${apiKey}`;
+        const { data } = await axios.get(apiUrl);
+
+        if (!data.status || !data.data) throw new Error("No se pudo identificar la canción.");
+
+        const { title, artist, album, release } = data.data;
+        const search = await yts(`${title} ${artist}`);
+        const video = search.videos[0];
+        if (!video) throw new Error("No se encontró la canción en YouTube.");
+
+        const videoUrl = video.url;
+        const thumbnail = video.thumbnail;
+        const fduration = video.timestamp;
+        const views = video.views.toLocaleString();
+        const channel = video.author.name || 'Desconocido';
+
+        const banner = `
+╔══════════════════╗
+║  ✦ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟮.𝟬 𝗕𝗢𝗧 ✦
+╚══════════════════╝
+
+🎵 *Canción detectada:*  
+╭───────────────╮  
+├ 📌 *Título:* ${title}
+├ 👤 *Artista:* ${artist}
+├ 💿 *Álbum:* ${album}
+├ 📅 *Lanzamiento:* ${release}
+├ 🔎 *Buscando:* ${video.title}
+├ ⏱️ *Duración:* ${fduration}
+├ 👁️ *Vistas:* ${views}
+├ 📺 *Canal:* ${channel}
+├ 🔗 *Link:* ${videoUrl}
+╰───────────────╯
+
+⏳ *Espere un momento, descargando la canción...*
+═════════════════════`;
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            image: { url: thumbnail },
+            caption: banner
+        }, { quoted: msg });
+
+        // Descargar desde YouTube en MP3
+        const res = await axios.get(`https://api.neoxr.eu/api/youtube?url=${encodeURIComponent(videoUrl)}&type=audio&quality=128kbps&apikey=${apiKey}`);
+        if (!res.data.status || !res.data.data?.url) throw new Error("No se pudo obtener el audio.");
+        const audioUrl = res.data.data.url;
+
+        const downloadPath = path.join(tmpDir, `${Date.now()}_raw.mp3`);
+        const finalPath = path.join(tmpDir, `${Date.now()}_fixed.mp3`);
+
+        // Descargar el audio
+        const audioRes = await axios.get(audioUrl, { responseType: 'stream' });
+        const audioStream = fs.createWriteStream(downloadPath);
+        await streamPipeline(audioRes.data, audioStream);
+
+        // Reparar con ffmpeg
+        await new Promise((resolve, reject) => {
+            ffmpeg(downloadPath)
+                .audioCodec('libmp3lame')
+                .audioBitrate('128k')
+                .save(finalPath)
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        // Enviar el audio procesado
+        await sock.sendMessage(msg.key.remoteJid, {
+            audio: fs.readFileSync(finalPath),
+            mimetype: 'audio/mpeg',
+            fileName: `${title}.mp3`
+        }, { quoted: msg });
+
+        fs.unlinkSync(inputPath);
+        fs.unlinkSync(downloadPath);
+        fs.unlinkSync(finalPath);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '✅', key: msg.key }
+        });
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ *Error:* ${err.message}`
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '❌', key: msg.key }
+        });
+    }
+
+    break;
+}
+
+case 'whatmusic6': {
+    const fs = require('fs');
+    const path = require('path');
+    const axios = require('axios');
+    const ffmpeg = require('fluent-ffmpeg');
+    const FormData = require('form-data');
+    const { promisify } = require('util');
+    const { pipeline } = require('stream');
+    const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
+    const yts = require('yt-search');
+
+    const streamPipeline = promisify(pipeline);
+    const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+
+    if (!quotedMsg || (!quotedMsg.audioMessage && !quotedMsg.videoMessage)) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "✳️ Responde a una nota de voz, audio o video para identificar la canción."
+        }, { quoted: msg });
+        break;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, {
+        react: { text: '🔍', key: msg.key }
+    });
+
+    try {
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+        const fileExt = quotedMsg.audioMessage ? 'mp3' : 'mp4';
+        const inputPath = path.join(tmpDir, `${Date.now()}.${fileExt}`);
+
+        // Descargar el archivo
+        const stream = await downloadContentFromMessage(
+            quotedMsg.audioMessage || quotedMsg.videoMessage,
+            quotedMsg.audioMessage ? 'audio' : 'video'
+        );
+        const writer = fs.createWriteStream(inputPath);
+        for await (const chunk of stream) writer.write(chunk);
+        writer.end();
+
+        // Subir a russellxz.click
+        const form = new FormData();
+        form.append('file', fs.createReadStream(inputPath));
+        form.append('expiry', '3600');
+
+        const upload = await axios.post('https://cdn.russellxz.click/upload.php', form, {
+            headers: form.getHeaders()
+        });
+
+        if (!upload.data || !upload.data.url) throw new Error('No se pudo subir el archivo');
+        const fileUrl = upload.data.url;
+
+        // Buscar canción en la API de neoxr
+        const apiURL = `https://api.neoxr.eu/api/whatmusic?url=${encodeURIComponent(fileUrl)}&apikey=russellxz`;
+        const res = await axios.get(apiURL);
+        if (!res.data.status || !res.data.data) throw new Error('No se pudo identificar la canción');
+
+        const { title, artist, album, release } = res.data.data;
+
+        // Buscar en YouTube
+        const ytSearch = await yts(`${title} ${artist}`);
+        const video = ytSearch.videos[0];
+        if (!video) throw new Error("No se encontró la canción en YouTube");
+
+        const banner = `
+╔══════════════════╗
+║ ✦ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟮.𝟬 𝗕𝗢𝗧 ✦
+╚══════════════════╝
+
+🎵 *Canción detectada:*  
+╭───────────────╮  
+├ 📌 *Título:* ${title}
+├ 👤 *Artista:* ${artist}
+├ 💿 *Álbum:* ${album}
+├ 📅 *Lanzamiento:* ${release}
+├ 🔎 *Buscando:* ${video.title}
+├ ⏱️ *Duración:* ${video.timestamp}
+├ 👁️ *Vistas:* ${video.views.toLocaleString()}
+├ 📺 *Canal:* ${video.author.name}
+├ 🔗 *Link:* ${video.url}
+╰───────────────╯
+
+⏳ *Espere un momento, descargando la canción...*`;
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            image: { url: video.thumbnail },
+            caption: banner
+        }, { quoted: msg });
+
+        // Descargar el audio desde YouTube
+        const ytRes = await axios.get(`https://api.neoxr.eu/api/youtube?url=${encodeURIComponent(video.url)}&type=audio&quality=128kbps&apikey=russellxz`);
+        const audioURL = ytRes.data.data.url;
+
+        const rawPath = path.join(tmpDir, `${Date.now()}_raw.m4a`);
+        const finalPath = path.join(tmpDir, `${Date.now()}_final.mp3`);
+
+        const audioRes = await axios.get(audioURL, { responseType: 'stream' });
+        await streamPipeline(audioRes.data, fs.createWriteStream(rawPath));
+
+        // Convertir con FFmpeg a MP3
+        await new Promise((resolve, reject) => {
+            ffmpeg(rawPath)
+                .audioCodec('libmp3lame')
+                .audioBitrate('128k')
+                .save(finalPath)
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            audio: fs.readFileSync(finalPath),
+            mimetype: 'audio/mpeg',
+            fileName: `${title}.mp3`
+        }, { quoted: msg });
+
+        fs.unlinkSync(inputPath);
+        fs.unlinkSync(rawPath);
+        fs.unlinkSync(finalPath);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '✅', key: msg.key }
+        });
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ *Error:* ${err.message}`
+        }, { quoted: msg });
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '❌', key: msg.key }
+        });
+    }
+
+    break;
+}
+        
+case 'ff2': {
+    const fs = require('fs');
+    const path = require('path');
+    const ffmpeg = require('fluent-ffmpeg');
+    const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
+    const { promisify } = require('util');
+    const { pipeline } = require('stream');
+    const streamPipeline = promisify(pipeline);
+
+    // Validación: el usuario debe citar un audio o documento mp3
+    const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    const audioMsg = quotedMsg?.audioMessage;
+    const docMsg = quotedMsg?.documentMessage;
+    const isAudioDoc = docMsg?.mimetype?.startsWith("audio");
+
+    if (!audioMsg && !isAudioDoc) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `✳️ Responde a un *audio* o *mp3 dañado* para repararlo.`
+        }, { quoted: msg });
+        break;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, {
+        react: { text: '🎧', key: msg.key }
+    });
+
+    try {
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+
+        const inputPath = path.join(tmpDir, `${Date.now()}_raw.mp3`);
+        const outputPath = path.join(tmpDir, `${Date.now()}_fixed.mp3`);
+
+        const stream = await downloadContentFromMessage(audioMsg ? audioMsg : docMsg, 'audio');
+        const writable = fs.createWriteStream(inputPath);
+        for await (const chunk of stream) {
+            writable.write(chunk);
+        }
+        writable.end();
+
+        const startTime = Date.now();
+
+        // Reparar el audio con ffmpeg
+        await new Promise((resolve, reject) => {
+            ffmpeg(inputPath)
+                .audioCodec('libmp3lame')
+                .audioBitrate('128k')
+                .format('mp3')
+                .save(outputPath)
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        const endTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            audio: fs.readFileSync(outputPath),
+            mimetype: 'audio/mpeg',
+            fileName: `audio_reparado.mp3`,
+            ptt: audioMsg?.ptt || false,
+            caption: `✅ *Audio reparado exitosamente*\n⏱️ *Tiempo de reparación:* ${endTime}s\n\n© Azura Ultra 2.0`
+        }, { quoted: msg });
+
+        fs.unlinkSync(inputPath);
+        fs.unlinkSync(outputPath);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '✅', key: msg.key }
+        });
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ *Error:* ${err.message}`
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '❌', key: msg.key }
+        });
+    }
+
+    break;
+}
+case 'tag': {
+  try {
+    const chatId = msg.key.remoteJid;
+    const senderJid = msg.key.participant || msg.key.remoteJid;
+    const senderNum = senderJid.replace(/[^0-9]/g, "");
+    const botNumber = sock.user?.id.split(":")[0].replace(/[^0-9]/g, "");
+
+    // Verificar que se use en un grupo
+    if (!chatId.endsWith("@g.us")) {
+      await sock.sendMessage(chatId, { text: "⚠️ Este comando solo se puede usar en grupos." }, { quoted: msg });
+      return;
+    }
+
+    // Verificar si es admin o el mismo bot
+    const metadata = await sock.groupMetadata(chatId);
+    const participant = metadata.participants.find(p => p.id.includes(senderNum));
+    const isAdmin = participant?.admin === "admin" || participant?.admin === "superadmin";
+    const isBot = botNumber === senderNum;
+
+    if (!isAdmin && !isBot) {
+      return await sock.sendMessage(chatId, {
+        text: "❌ Solo los administradores del grupo o el bot pueden usar este comando."
       }, { quoted: msg });
     }
 
-    // Define rutas temporales
-    const tmpDir = path.join(__dirname, 'tmp');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    const stickerPath = path.join(tmpDir, `${Date.now()}.webp`);
-    const videoPath = stickerPath.replace('.webp', '.mp4');
+    const allMentions = metadata.participants.map(p => p.id);
+    let messageToForward = null;
+    let hasMedia = false;
 
-    fs.writeFileSync(stickerPath, buffer);
+    if (msg.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+      const quoted = msg.message.extendedTextMessage.contextInfo.quotedMessage;
 
-    // Convierte el sticker a video forzando el formato de entrada como WebP y 
-    // usando opciones para stickers animados
-    ffmpeg(stickerPath)
-      .inputOptions(['-f', 'webp', '-ignore_loop', '0'])
-      .outputOptions([
-        '-movflags faststart',
-        '-pix_fmt', 'yuv420p',
-        '-vf', 'scale=512:512'
-      ])
-      .save(videoPath)
-      .on('end', async () => {
-        await sock.sendMessage(msg.key.remoteJid, { 
-          video: { url: videoPath },
-          caption: "🎥 *Aquí está tu video convertido del sticker animado.*"
-        }, { quoted: msg });
-        // Limpieza de archivos temporales
-        fs.unlinkSync(stickerPath);
-        fs.unlinkSync(videoPath);
-        // Reacción final de éxito
-        await sock.sendMessage(msg.key.remoteJid, { 
-          react: { text: "✅", key: msg.key } 
-        });
-      })
-      .on('error', async (err) => {
-        console.error("❌ Error al convertir sticker a video:", err);
-        await sock.sendMessage(msg.key.remoteJid, { 
-          text: "❌ *No se pudo convertir el sticker en video.*" 
-        }, { quoted: msg });
-        fs.unlinkSync(stickerPath);
-        if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
-      });
+      if (quoted.conversation) {
+        messageToForward = { text: quoted.conversation };
+      } else if (quoted.extendedTextMessage?.text) {
+        messageToForward = { text: quoted.extendedTextMessage.text };
+      } else if (quoted.imageMessage) {
+        const stream = await downloadContentFromMessage(quoted.imageMessage, "image");
+        let buffer = Buffer.alloc(0);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        const mimetype = quoted.imageMessage.mimetype || "image/jpeg";
+        const caption = quoted.imageMessage.caption || "";
+        messageToForward = { image: buffer, mimetype, caption };
+        hasMedia = true;
+      } else if (quoted.videoMessage) {
+        const stream = await downloadContentFromMessage(quoted.videoMessage, "video");
+        let buffer = Buffer.alloc(0);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        const mimetype = quoted.videoMessage.mimetype || "video/mp4";
+        const caption = quoted.videoMessage.caption || "";
+        messageToForward = { video: buffer, mimetype, caption };
+        hasMedia = true;
+      } else if (quoted.audioMessage) {
+        const stream = await downloadContentFromMessage(quoted.audioMessage, "audio");
+        let buffer = Buffer.alloc(0);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        const mimetype = quoted.audioMessage.mimetype || "audio/mp3";
+        messageToForward = { audio: buffer, mimetype };
+        hasMedia = true;
+      } else if (quoted.stickerMessage) {
+        const stream = await downloadContentFromMessage(quoted.stickerMessage, "sticker");
+        let buffer = Buffer.alloc(0);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        messageToForward = { sticker: buffer };
+        hasMedia = true;
+      } else if (quoted.documentMessage) {
+        const stream = await downloadContentFromMessage(quoted.documentMessage, "document");
+        let buffer = Buffer.alloc(0);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        const mimetype = quoted.documentMessage.mimetype || "application/pdf";
+        const caption = quoted.documentMessage.caption || "";
+        messageToForward = { document: buffer, mimetype, caption };
+        hasMedia = true;
+      }
+    }
+
+    if (!hasMedia && args.join(" ").trim().length > 0) {
+      messageToForward = { text: args.join(" ") };
+    }
+
+    if (!messageToForward) {
+      await sock.sendMessage(chatId, { text: "⚠️ Debes responder a un mensaje o proporcionar un texto para reenviar." }, { quoted: msg });
+      return;
+    }
+
+    await sock.sendMessage(chatId, {
+      ...messageToForward,
+      mentions: allMentions
+    }, { quoted: msg });
+
   } catch (error) {
-    console.error("❌ Error en el comando tovideo:", error);
+    console.error("❌ Error en el comando tag:", error);
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ Ocurrió un error al ejecutar el comando tag."
+    }, { quoted: msg });
+  }
+  break;
+}      
+
+
+
+case 'linia': {
+  const fs = require("fs");
+  const path = require("path");
+
+  if (!isOwner) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "⛔ Este comando es solo para el *Owner*."
+    }, { quoted: msg });
+    break;
+  }
+
+  const buscar = args[0];
+  if (!buscar) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "📍 Especifica el comando que deseas buscar.\n\nEjemplo: *.linia play*"
+    }, { quoted: msg });
+    break;
+  }
+
+  const archivoMain = path.join(__dirname, "main.js");
+
+  if (!fs.existsSync(archivoMain)) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ No se encontró el archivo *main.js*."
+    }, { quoted: msg });
+    break;
+  }
+
+  const contenido = fs.readFileSync(archivoMain, "utf-8");
+  const lineas = contenido.split("\n");
+  let lineaEncontrada = -1;
+
+  for (let i = 0; i < lineas.length; i++) {
+    const linea = lineas[i].trim();
+    const regex = new RegExp(`^case ['"\`]${buscar}['"\`]:`);
+    if (regex.test(linea)) {
+      lineaEncontrada = i + 1; // porque queremos número de línea 1-based
+      break;
+    }
+  }
+
+  if (lineaEncontrada !== -1) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: `✅ El comando *${buscar}* fue encontrado en la línea *${lineaEncontrada}* de *main.js*.`
+    }, { quoted: msg });
+  } else {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: `❌ El comando *${buscar}* no se encontró en *main.js*.`
+    }, { quoted: msg });
+  }
+
+  break;
+}
+        
+  case 'ff': {
+    const fs = require('fs');
+    const path = require('path');
+    const ffmpeg = require('fluent-ffmpeg');
+    const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
+    const { promisify } = require('util');
+    const { pipeline } = require('stream');
+    const streamPipeline = promisify(pipeline);
+
+    // Validación: el usuario debe citar un video
+    const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (!quotedMsg || !quotedMsg.videoMessage) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `✳️ Responde a un *video* para optimizarlo para WhatsApp.`
+        }, { quoted: msg });
+        break;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, {
+        react: { text: '🔧', key: msg.key }
+    });
+
+    try {
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+
+        const rawPath = path.join(tmpDir, `${Date.now()}_raw.mp4`);
+        const finalPath = path.join(tmpDir, `${Date.now()}_fixed.mp4`);
+
+        // Descargar el video citado
+        const stream = await downloadContentFromMessage(quotedMsg.videoMessage, 'video');
+        const writable = fs.createWriteStream(rawPath);
+        for await (const chunk of stream) {
+            writable.write(chunk);
+        }
+        writable.end();
+
+        const startTime = Date.now();
+
+        // Conversión con ffmpeg para compatibilidad
+        await new Promise((resolve, reject) => {
+            ffmpeg(rawPath)
+                .outputOptions([
+                    '-c:v libx264',
+                    '-preset fast',
+                    '-crf 28',
+                    '-c:a aac',
+                    '-b:a 128k',
+                    '-movflags +faststart'
+                ])
+                .save(finalPath)
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        const endTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            video: fs.readFileSync(finalPath),
+            mimetype: 'video/mp4',
+            fileName: `video_optimo.mp4`,
+            caption: `✅ *Video optimizado para WhatsApp*\n⏱️ *Conversión:* ${endTime}s\n\n© Azura Ultra 2.0`
+        }, { quoted: msg });
+
+        fs.unlinkSync(rawPath);
+        fs.unlinkSync(finalPath);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '✅', key: msg.key }
+        });
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ *Error:* ${err.message}`
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '❌', key: msg.key }
+        });
+    }
+
+    break;
+}
+      
+case "git": {
+    try {
+        // Verificar que el comando solo lo use el owner
+        if (!isOwner(sender)) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: "⚠️ *Solo el propietario puede usar este comando.*"
+            }, { quoted: msg });
+            return;
+        }
+
+        // Verificar si se proporcionó un comando
+        if (!args[0]) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: "⚠️ *Debes especificar el nombre de un comando.*\nEjemplo: `.git rest`"
+            }, { quoted: msg });
+            return;
+        }
+
+        // Leer el archivo main.js
+        const mainFilePath = "./main.js";
+        if (!fs.existsSync(mainFilePath)) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: "❌ *Error:* No se encontró el archivo de comandos."
+            }, { quoted: msg });
+            return;
+        }
+
+        // Leer el contenido del archivo main.js
+        const mainFileContent = fs.readFileSync(mainFilePath, "utf-8");
+
+        // Buscar el comando solicitado
+        const commandName = args[0].toLowerCase();
+        const commandRegex = new RegExp(`case\\s+['"]${commandName}['"]:\\s*([\\s\\S]*?)\\s*break;`, "g");
+        const match = commandRegex.exec(mainFileContent);
+
+        if (!match) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ *Error:* No se encontró el comando *${commandName}* en el archivo main.js.`
+            }, { quoted: msg });
+            return;
+        }
+
+        // Extraer el código del comando
+        const commandCode = `📜 *Código del comando ${commandName}:*\n\n\`\`\`${match[0]}\`\`\``;
+
+        // Enviar el código como mensaje
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: commandCode
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error("❌ Error en el comando git:", error);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "❌ *Error al obtener el código del comando.*"
+        }, { quoted: msg });
+    }
+    break;
+}
+
+
+
+
+      
+      
+      case 'tiktoksearch': {
+    const axios = require('axios');
+
+    if (!args.length) {
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}tiktoksearch <query>\`` 
+        }, { quoted: msg });
+        return;
+    }
+
+    const query = args.join(' ');
+    const apiUrl = `https://api.dorratz.com/v2/tiktok-s?q=${encodeURIComponent(query)}`;
+
     await sock.sendMessage(msg.key.remoteJid, { 
-      text: "❌ *Ocurrió un error al convertir el sticker en video.*" 
+        react: { text: "⏳", key: msg.key } 
+    });
+
+    try {
+        const response = await axios.get(apiUrl);
+
+        if (response.data.status !== 200 || !response.data.data || response.data.data.length === 0) {
+            return await sock.sendMessage(msg.key.remoteJid, { 
+                text: "No se encontraron resultados para tu consulta." 
+            }, { quoted: msg });
+        }
+
+        const results = response.data.data.slice(0, 5);
+
+        const resultText = results.map((video, index) => `
+📌 *Resultado ${index + 1}:*
+📹 *Título:* ${video.title}
+👤 *Autor:* ${video.author.nickname} (@${video.author.username})
+👀 *Reproducciones:* ${video.play.toLocaleString()}
+❤️ *Me gusta:* ${video.like.toLocaleString()}
+💬 *Comentarios:* ${video.coment.toLocaleString()}
+🔗 *Enlace:* ${video.url}
+        `).join('\n');
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `🔍 *Resultados de búsqueda en TikTok para "${query}":*\n\n${resultText}` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "✅", key: msg.key } 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .tiktoksearch:", error);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: "❌ *Ocurrió un error al procesar tu solicitud.*" 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "❌", key: msg.key } 
+        });
+    }
+    break;
+}
+        case 'dalle': {
+    const axios = require('axios');
+
+    if (!args.length) {
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}dalle Gato en la luna\`` 
+        }, { quoted: msg });
+        return;
+    }
+
+    const text = args.join(' ');
+    const apiUrl = `https://api.hiuraa.my.id/ai-img/imagen?text=${encodeURIComponent(text)}`;
+
+    await sock.sendMessage(msg.key.remoteJid, { 
+        react: { text: "⏳", key: msg.key } 
+    });
+
+    try {
+        const response = await axios.get(apiUrl, { responseType: 'arraybuffer' });
+
+        if (!response.data) {
+            throw new Error('No se pudo generar la imagen.');
+        }
+
+        const imageBuffer = Buffer.from(response.data, 'binary');
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            image: imageBuffer,
+            caption: `🖼️ *Imagen generada para:* ${text}`,
+            mimetype: 'image/jpeg'
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "✅", key: msg.key } 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .dalle:", error.message);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `❌ *Error al generar la imagen:*\n_${error.message}_` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "❌", key: msg.key } 
+        });
+    }
+    break;
+}
+        
+
+
+        
+case 'play3': {
+    const fetch = require('node-fetch');
+    const axios = require('axios');
+
+    const apis = {
+        delirius: 'https://delirius-apiofc.vercel.app/',
+        ryzen: 'https://apidl.asepharyana.cloud/',
+        rioo: 'https://restapi.apibotwa.biz.id/'
+    };
+
+    await sock.sendMessage(msg.key.remoteJid, { react: { text: "🎶", key: msg.key } });
+
+    if (!text) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `⚠️ Escribe lo que deseas buscar en Spotify.\nEjemplo: *${global.prefix}play3* Marshmello - Alone`
+        }, { quoted: msg });
+        break;
+    }
+
+    try {
+        const res = await axios.get(`${apis.delirius}search/spotify?q=${encodeURIComponent(text)}&limit=1`);
+        if (!res.data.data || res.data.data.length === 0) {
+            throw '❌ No se encontraron resultados en Spotify.';
+        }
+
+        const result = res.data.data[0];
+        const img = result.image;
+        const url = result.url;
+        const info = `⧁ 𝙏𝙄𝙏𝙐𝙇𝙊: ${result.title}
+⧁ 𝘼𝙍𝙏𝙄𝙎𝙏𝘼: ${result.artist}
+⧁ 𝘿𝙐𝙍𝘼𝘾𝙄𝙊́𝙉: ${result.duration}
+⧁ 𝙋𝙐𝘽𝙇𝙄𝘾𝘼𝘿𝙊: ${result.publish}
+⧁ 𝙋𝙊𝙋𝙐𝙇𝘼𝙍𝙄𝘿𝘼𝘿: ${result.popularity}
+⧁ 𝙀𝙉𝙇𝘼𝘾𝙀: ${url}
+
+🎶 *Azura Ultra  esta enviando tu música...*`.trim();
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            image: { url: img },
+            caption: info
+        }, { quoted: msg });
+
+        const sendAudio = async (link) => {
+            await sock.sendMessage(msg.key.remoteJid, {
+                audio: { url: link },
+                fileName: `${result.title}.mp3`,
+                mimetype: 'audio/mpeg'
+            }, { quoted: msg });
+        };
+
+        // Intento 1
+        try {
+            const res1 = await fetch(`${apis.delirius}download/spotifydl?url=${encodeURIComponent(url)}`);
+            const json1 = await res1.json();
+            return await sendAudio(json1.data.url);
+        } catch (e1) {
+            // Intento 2
+            try {
+                const res2 = await fetch(`${apis.delirius}download/spotifydlv3?url=${encodeURIComponent(url)}`);
+                const json2 = await res2.json();
+                return await sendAudio(json2.data.url);
+            } catch (e2) {
+                // Intento 3
+                try {
+                    const res3 = await fetch(`${apis.rioo}api/spotify?url=${encodeURIComponent(url)}`);
+                    const json3 = await res3.json();
+                    return await sendAudio(json3.data.response);
+                } catch (e3) {
+                    // Intento 4
+                    try {
+                        const res4 = await fetch(`${apis.ryzen}api/downloader/spotify?url=${encodeURIComponent(url)}`);
+                        const json4 = await res4.json();
+                        return await sendAudio(json4.link);
+                    } catch (e4) {
+                        await sock.sendMessage(msg.key.remoteJid, {
+                            text: `❌ No se pudo descargar el audio.\nError: ${e4.message}`
+                        }, { quoted: msg });
+                    }
+                }
+            }
+        }
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ Ocurrió un error: ${err.message || err}`
+        }, { quoted: msg });
+    }
+
+    break;
+}
+      
+case 'play5': {
+    const yts = require('yt-search');
+    const axios = require('axios');
+    const fs = require('fs');
+    const path = require('path');
+    const { pipeline } = require('stream');
+    const { promisify } = require('util');
+    const ffmpeg = require('fluent-ffmpeg');
+
+    const streamPipeline = promisify(pipeline);
+
+    const formatAudio = ['mp3', 'm4a', 'webm', 'acc', 'flac', 'opus', 'ogg', 'wav'];
+
+    const ddownr = {
+        download: async (url, format) => {
+            if (!formatAudio.includes(format)) {
+                throw new Error('Formato no soportado.');
+            }
+
+            const config = {
+                method: 'GET',
+                url: `https://p.oceansaver.in/ajax/download.php?format=${format}&url=${encodeURIComponent(url)}&api=dfcb6d76f2f6a9894gjkege8a4ab232222`,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            };
+
+            const response = await axios.request(config);
+            if (response.data && response.data.success) {
+                const { id, title, info } = response.data;
+                const downloadUrl = await ddownr.cekProgress(id);
+                return { title, downloadUrl, thumbnail: info.image, uploader: info.author, duration: info.duration, views: info.views, video_url: info.video_url };
+            } else {
+                throw new Error('No se pudo obtener la información del audio.');
+            }
+        },
+        cekProgress: async (id) => {
+            const config = {
+                method: 'GET',
+                url: `https://p.oceansaver.in/ajax/progress.php?id=${id}`,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            };
+
+            while (true) {
+                const response = await axios.request(config);
+                if (response.data?.success && response.data.progress === 1000) {
+                    return response.data.download_url;
+                }
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        }
+    };
+
+    if (!text) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `✳️ Usa el comando correctamente:\n\n📌 Ejemplo: *${global.prefix}play5* La Factoria - Perdoname`
+        }, { quoted: msg });
+        break;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, {
+        react: { text: '⏳', key: msg.key }
+    });
+
+    try {
+        const search = await yts(text);
+        if (!search.videos || search.videos.length === 0) {
+            throw new Error('No se encontraron resultados.');
+        }
+
+        const video = search.videos[0];
+        const { title, url, timestamp, views, author, thumbnail } = video;
+
+        const infoMessage = `
+╔══════════════════╗
+║  ✦ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 BOT 2.0 ✦   
+╚══════════════════╝
+
+📀 *𝙄𝙣𝙛𝙤 𝙙𝙚𝙡 𝙫𝙞𝙙𝙚𝙤:*  
+╭───────────────╮  
+├ 🎼 *Título:* ${title}
+├ ⏱️ *Duración:* ${timestamp}
+├ 👁️ *Vistas:* ${views.toLocaleString()}
+├ 👤 *Autor:* ${author.name}
+└ 🔗 *Enlace:* ${url}
+╰───────────────╯
+
+📥 *Opciones de Descarga:*  
+┣ 🎵 *Audio:* _${global.prefix}play5 ${text}_  
+┣ 🎵 *Audio de spotify:* _${global.prefix}play3 ${text}_
+┣ 🎥 *video:* _${global.prefix}play6 ${text}_  
+┗ 🎥 *Video:* _${global.prefix}play4 ${text}_
+
+⏳ *Espera un momento...*  
+⚙️ *Azura Ultra 2.0 está procesando tu música...*
+
+═════════════════════  
+     𖥔 𝗔𝘇𝘂𝗋𝗮 𝗨𝗹𝘁𝗋𝗮 2.0 BOT 𖥔
+═════════════════════`;
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            image: { url: thumbnail },
+            caption: infoMessage
+        }, { quoted: msg });
+
+        const { downloadUrl } = await ddownr.download(url, 'mp3');
+
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+        const rawPath = path.join(tmpDir, `${Date.now()}_raw.mp3`);
+        const finalPath = path.join(tmpDir, `${Date.now()}_compressed.mp3`);
+
+        const audioRes = await axios.get(downloadUrl, {
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
+
+        await streamPipeline(audioRes.data, fs.createWriteStream(rawPath));
+
+        // Compresión del audio con ffmpeg
+        await new Promise((resolve, reject) => {
+            ffmpeg(rawPath)
+                .audioBitrate('128k')
+                .format('mp3')
+                .on('end', resolve)
+                .on('error', reject)
+                .save(finalPath);
+        });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            audio: fs.readFileSync(finalPath),
+            mimetype: 'audio/mpeg',
+            fileName: `${title}.mp3`
+        }, { quoted: msg });
+
+        fs.unlinkSync(rawPath);
+        fs.unlinkSync(finalPath);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '✅', key: msg.key }
+        });
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ *Error Talvez excede el límite de 99MB:* ${err.message}`
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '❌', key: msg.key }
+        });
+    }
+
+    break;
+}
+      
+case 'play6': {
+    const yts = require('yt-search');
+    const axios = require('axios');
+    const fs = require('fs');
+    const path = require('path');
+    const { pipeline } = require('stream');
+    const { promisify } = require('util');
+    const ffmpeg = require('fluent-ffmpeg');
+    const streamPipeline = promisify(pipeline);
+
+    const formatVideo = ['240', '360', '480', '720'];
+
+    const ddownr = {
+        download: async (url, format) => {
+            if (!formatVideo.includes(format)) {
+                throw new Error('Formato de video no soportado.');
+            }
+
+            const config = {
+                method: 'GET',
+                url: `https://p.oceansaver.in/ajax/download.php?format=${format}&url=${encodeURIComponent(url)}&api=dfcb6d76f2f6a9894gjkege8a4ab232222`,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            };
+
+            const response = await axios.request(config);
+            if (response.data && response.data.success) {
+                const { id, title, info } = response.data;
+                const downloadUrl = await ddownr.cekProgress(id);
+                return {
+                    title,
+                    downloadUrl,
+                    thumbnail: info.image,
+                    uploader: info.author,
+                    duration: info.duration,
+                    views: info.views,
+                    video_url: info.video_url
+                };
+            } else {
+                throw new Error('No se pudo obtener la información del video.');
+            }
+        },
+        cekProgress: async (id) => {
+            const config = {
+                method: 'GET',
+                url: `https://p.oceansaver.in/ajax/progress.php?id=${id}`,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            };
+
+            while (true) {
+                const response = await axios.request(config);
+                if (response.data?.success && response.data.progress === 1000) {
+                    return response.data.download_url;
+                }
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        }
+    };
+
+    if (!text) {
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `✳️ Usa el comando correctamente:\n\n📌 Ejemplo: *${global.prefix}play6* La Factoria - Perdoname`
+        }, { quoted: msg });
+        break;
+    }
+
+    await sock.sendMessage(msg.key.remoteJid, {
+        react: { text: '⏳', key: msg.key }
+    });
+
+    try {
+        const search = await yts(text);
+        if (!search.videos || search.videos.length === 0) {
+            throw new Error('No se encontraron resultados.');
+        }
+
+        const video = search.videos[0];
+        const { title, url, timestamp, views, author, thumbnail } = video;
+
+        // Convertimos duración a minutos
+        const durParts = timestamp.split(':').map(Number);
+        const minutes = durParts.length === 3
+            ? durParts[0] * 60 + durParts[1]
+            : durParts[0];
+
+        // Selección de calidad según duración
+        let quality = '360';
+        if (minutes <= 3) quality = '720';
+        else if (minutes <= 5) quality = '480';
+        else quality = '360';
+
+        const infoMessage = `
+╔══════════════════╗
+║✦ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 2.0 BOT  ✦   
+╚══════════════════╝
+
+📀 *𝙄𝙣𝙛𝙤 𝙙𝙚𝙡 𝙫𝙞𝙙𝙚𝙤:*  
+╭───────────────╮  
+├ 🎼 *Título:* ${title}
+├ ⏱️ *Duración:* ${timestamp}
+├ 👁️ *Vistas:* ${views.toLocaleString()}
+├ 👤 *Autor:* ${author.name}
+└ 🔗 *Enlace:* ${url}
+╰───────────────╯
+
+📥 *Opciones de Descarga:*  
+┣ 🎵 *Audio:* _${global.prefix}play ${text}_  
+┣ 🎵 *Audio de spotify:* _${global.prefix}play3 ${text}_
+┣ 🎥 *video:* _${global.prefix}play2 ${text}_
+┗ 🎥 *Video:* _${global.prefix}play6 ${text}_
+
+⏳ *Espera un momento...*  
+⚙️ *Azura Ultra 2.0 está procesando tu video...*
+
+═════════════════════  
+     𖥔 𝗔𝘇𝘂𝗋𝗮 𝗨𝗹𝘁𝗋𝗮 2.0 BOT𖥔
+═════════════════════`;
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            image: { url: thumbnail },
+            caption: infoMessage
+        }, { quoted: msg });
+
+        const { downloadUrl } = await ddownr.download(url, quality);
+
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+        const rawPath = path.join(tmpDir, `${Date.now()}_raw.mp4`);
+        const finalPath = path.join(tmpDir, `${Date.now()}_compressed.mp4`);
+
+        const videoRes = await axios.get(downloadUrl, {
+            responseType: 'stream',
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+
+        await streamPipeline(videoRes.data, fs.createWriteStream(rawPath));
+
+        // Ajuste dinámico de compresión
+        let crf = 26;
+        let bVideo = '600k';
+        let bAudio = '128k';
+        if (minutes <= 2) {
+            crf = 24; bVideo = '800k';
+        } else if (minutes > 5) {
+            crf = 28; bVideo = '400k'; bAudio = '96k';
+        }
+
+        await new Promise((resolve, reject) => {
+            ffmpeg(rawPath)
+                .videoCodec('libx264')
+                .audioCodec('aac')
+                .outputOptions([
+                    '-preset', 'veryfast',
+                    `-crf`, `${crf}`,
+                    `-b:v`, bVideo,
+                    `-b:a`, bAudio,
+                    '-movflags', '+faststart'
+                ])
+                .on('end', resolve)
+                .on('error', reject)
+                .save(finalPath);
+        });
+
+        const finalText = `🎬 Aquí tiene su video en calidad ${quality}p.
+
+Disfrútelo y continúe explorando el mundo digital.
+
+© Azura Ultra 2.0 Bot`;
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            video: fs.readFileSync(finalPath),
+            mimetype: 'video/mp4',
+            fileName: `${title}.mp4`,
+            caption: finalText
+        }, { quoted: msg });
+
+        fs.unlinkSync(rawPath);
+        fs.unlinkSync(finalPath);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '✅', key: msg.key }
+        });
+
+    } catch (err) {
+        console.error(err);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `❌ *Error Talvez excede el límite de 99MB:* ${err.message}`
+        }, { quoted: msg });
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: '❌', key: msg.key }
+        });
+    }
+
+    break;
+}
+
+case 'play1': {
+    const yts = require('yt-search');
+    const axios = require('axios');
+    const fs = require('fs');
+    const path = require('path');
+    const { pipeline } = require('stream');
+    const { promisify } = require('util');
+    const ffmpeg = require('fluent-ffmpeg');
+    const streamPipeline = promisify(pipeline);
+
+    const formatAudio = ['mp3', 'm4a', 'webm', 'acc', 'flac', 'opus', 'ogg', 'wav'];
+
+    const ddownr = {
+        download: async (url, format) => {
+            if (!formatAudio.includes(format)) {
+                throw new Error('Formato no soportado.');
+            }
+
+            const config = {
+                method: 'GET',
+                url: `https://p.oceansaver.in/ajax/download.php?format=${format}&url=${encodeURIComponent(url)}&api=dfcb6d76f2f6a9894gjkege8a4ab232222`,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            };
+
+            const response = await axios.request(config);
+            if (response.data && response.data.success) {
+                const { id, title, info } = response.data;
+                const downloadUrl = await ddownr.cekProgress(id);
+                return { title, downloadUrl, thumbnail: info.image };
+            } else {
+                throw new Error('No se pudo obtener la info del video.');
+            }
+        },
+        cekProgress: async (id) => {
+            const config = {
+                method: 'GET',
+                url: `https://p.oceansaver.in/ajax/progress.php?id=${id}`,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            };
+
+            while (true) {
+                const response = await axios.request(config);
+                if (response.data?.success && response.data.progress === 1000) {
+                    return response.data.download_url;
+                }
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        }
+    };
+
+    await sock.sendMessage(msg.key.remoteJid, { react: { text: "🎶", key: msg.key } });
+
+    try {
+        if (!text || text.trim() === "") {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `⚠️ Escribe por favor el nombre de la canción.\nEjemplo: *${global.prefix}play1 Boza Yaya*`
+            }, { quoted: msg });
+            return;
+        }
+
+        const search = await yts(text);
+        if (!search.videos || search.videos.length === 0) {
+            throw new Error('No se encontraron resultados.');
+        }
+
+        const video = search.videos[0];
+        const { title, url, thumbnail } = video;
+
+        const { downloadUrl } = await ddownr.download(url, 'mp3');
+
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+        const rawPath = path.join(tmpDir, `${Date.now()}_raw.mp3`);
+        const finalPath = path.join(tmpDir, `${Date.now()}_compressed.mp3`);
+
+        const audioRes = await axios.get(downloadUrl, {
+            responseType: 'stream',
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+
+        await streamPipeline(audioRes.data, fs.createWriteStream(rawPath));
+
+        await new Promise((resolve, reject) => {
+            ffmpeg(rawPath)
+                .audioBitrate('128k')
+                .format('mp3')
+                .on('end', resolve)
+                .on('error', reject)
+                .save(finalPath);
+        });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            audio: fs.readFileSync(finalPath),
+            fileName: `${title}.mp3`,
+            mimetype: "audio/mpeg",
+            contextInfo: {
+                externalAdReply: {
+                    title: title,
+                    body: "αʑυrα υℓτrα 2.0 вστ",
+                    mediaType: 1,
+                    previewType: "PHOTO",
+                    thumbnailUrl: thumbnail,
+                    showAdAttribution: true,
+                    renderLargerThumbnail: true
+                }
+            }
+        }, { quoted: msg });
+
+        fs.unlinkSync(rawPath);
+        fs.unlinkSync(finalPath);
+
+    } catch (error) {
+        console.error(error);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "⚠️ Hubo un pequeño error Talvez excede el límite de 99MB:("
+        }, { quoted: msg });
+    }
+
+    break;
+}
+
+
+case 'copiarpg': {
+    try {
+        // Reacción de archivo listo 📁
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: "📁", key: msg.key }
+        });
+
+        // Verificar si es owner
+        if (!isOwner(sender)) {
+            return sock.sendMessage(msg.key.remoteJid, {
+                text: "⛔ *Solo el propietario del bot puede usar este comando.*"
+            }, { quoted: msg });
+        }
+
+        const fs = require("fs");
+        const filePath = "./rpg.json";
+
+        if (!fs.existsSync(filePath)) {
+            return sock.sendMessage(msg.key.remoteJid, {
+                text: "❌ *El archivo rpg.json no existe.*"
+            }, { quoted: msg });
+        }
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            document: fs.readFileSync(filePath),
+            fileName: "rpg.json",
+            mimetype: "application/json",
+            caption: "📂 *Aquí tienes el archivo RPG actualizado*"
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error("❌ Error en .copiarpg:", error);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "❌ *Ocurrió un error al enviar el archivo RPG.*"
+        }, { quoted: msg });
+    }
+    break;
+}
+      
+case 'robar': {
+  try {
+    const fs = require("fs");
+    const rpgFile = "./rpg.json";
+    const userId = msg.key.participant || msg.key.remoteJid;
+    const cooldownTime = 10 * 60 * 1000; // 10 minutos
+
+    // 🥷 Reacción inicial
+    await sock.sendMessage(msg.key.remoteJid, {
+      react: { text: "🥷", key: msg.key }
+    });
+
+    // Verificar si el archivo existe
+    if (!fs.existsSync(rpgFile)) {
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: "❌ *Los datos del RPG no están disponibles.*"
+      }, { quoted: msg });
+    }
+
+    let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
+
+    // Verificar que el ladrón esté registrado
+    if (!rpgData.usuarios[userId]) {
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: `❌ *No tienes una cuenta registrada en el gremio Azura Ultra.*\n📜 Usa \`${global.prefix}rpg <nombre> <edad>\` para registrarte.`
+      }, { quoted: msg });
+    }
+
+    let usuario = rpgData.usuarios[userId];
+
+    // Verificar que el ladrón tenga vida
+    if (usuario.vida <= 0) {
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: `🚑 *¡No puedes robar! Tu vida es 0.*\n💉 Usa \`${global.prefix}hospital\` para curarte.`
+      }, { quoted: msg });
+    }
+
+    let tiempoActual = Date.now();
+    if (usuario.cooldowns?.robar && (tiempoActual - usuario.cooldowns.robar) < cooldownTime) {
+      let tiempoRestante = ((usuario.cooldowns.robar + cooldownTime - tiempoActual) / (60 * 1000)).toFixed(1);
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: `⏳ *Debes esperar ${tiempoRestante} minutos antes de volver a robar.*`
+      }, { quoted: msg });
+    }
+
+    // Obtener ID de la víctima por mención o cita
+    let targetId = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
+                   msg.message?.extendedTextMessage?.contextInfo?.participant;
+
+    if (!targetId) {
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: `⚠️ *Debes citar o mencionar al usuario que deseas robar.*\n📌 Ejemplo: \`${global.prefix}robar @usuario\``
+      }, { quoted: msg });
+    }
+
+    // Verificar si la víctima está registrada
+    if (!rpgData.usuarios[targetId]) {
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: `❌ *El usuario al que intentas robar no está registrado en el RPG.*`
+      }, { quoted: msg });
+    }
+
+    // Agregamos el ID para poder usarlo en las menciones
+    let victima = {
+      ...rpgData.usuarios[targetId],
+      id: targetId
+    };
+
+    // Calcular si el robo tiene éxito
+    let exito = Math.random() < 0.5;
+    let vidaPerdida = exito
+      ? Math.floor(Math.random() * (10 - 5 + 1)) + 5
+      : Math.floor(Math.random() * (20 - 10 + 1)) + 10;
+
+    usuario.vida = Math.max(0, usuario.vida - vidaPerdida);
+
+    let xpRobado = 0;
+    let diamantesRobados = 0;
+
+    if (exito) {
+      xpRobado = Math.floor(Math.random() * (3000 - 500 + 1)) + 500;
+
+      if (victima.diamantes > 0) {
+        diamantesRobados = Math.min(victima.diamantes, Math.floor(Math.random() * (1500 - 20 + 1)) + 20);
+      } else {
+        xpRobado += Math.floor(Math.random() * (1000 - 300 + 1)) + 300;
+      }
+
+      usuario.experiencia += xpRobado;
+      usuario.diamantes += diamantesRobados;
+
+      victima.diamantes = Math.max(0, victima.diamantes - diamantesRobados);
+      victima.experiencia = Math.max(0, victima.experiencia - xpRobado);
+    } else {
+      let xpPerdido = Math.floor(Math.random() * (1000 - 300 + 1)) + 300;
+      usuario.experiencia = Math.max(0, usuario.experiencia - xpPerdido);
+    }
+
+    // Resultado del robo
+    const textosExito = [
+      `🥷 *${usuario.nombre} robó exitosamente a @${victima.id.split('@')[0]}.*\n💎 *Diamantes robados:* ${diamantesRobados}\n✨ *XP robada:* ${xpRobado}`,
+      `💰 *¡Plan maestro! ${usuario.nombre} engañó a @${victima.id.split('@')[0]} y se fue con el botín.*\n💎 *Diamantes:* ${diamantesRobados}\n🎯 *XP:* ${xpRobado}`,
+      `🚀 *Sigiloso como un ninja, ${usuario.nombre} despojó a @${victima.id.split('@')[0]}.*\n💎 *Diamantes:* ${diamantesRobados}\n🧠 *XP:* ${xpRobado}`
+    ];
+    const textosFracaso = [
+      `🚨 *¡${usuario.nombre} fue atrapado intentando robar y recibió un castigo!*\n❤️ *Vida perdida:* ${vidaPerdida}`,
+      `❌ *Intento fallido... ${usuario.nombre} quiso robar a @${victima.id.split('@')[0]} pero fue descubierto.*\n❤️ *Vida perdida:* ${vidaPerdida}`
+    ];
+
+    const mensajeResultado = exito
+      ? textosExito[Math.floor(Math.random() * textosExito.length)]
+      : textosFracaso[Math.floor(Math.random() * textosFracaso.length)];
+
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: mensajeResultado,
+      mentions: [userId, targetId]
+    }, { quoted: msg });
+
+    // Posibilidad de subir habilidad
+    let habilidadesArray = Object.keys(usuario.habilidades || {});
+    if (habilidadesArray.length > 0 && Math.random() < 0.3) {
+      let habilidadSubida = habilidadesArray[Math.floor(Math.random() * habilidadesArray.length)];
+      usuario.habilidades[habilidadSubida].nivel += 1;
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: `🌟 *¡${usuario.nombre} ha mejorado su habilidad!*\n🔹 *${habilidadSubida}: Nivel ${usuario.habilidades[habilidadSubida].nivel}*`
+      }, { quoted: msg });
+    }
+
+    // Subida de nivel
+    let xpMaxNivel = usuario.nivel === 1 ? 1000 : usuario.nivel * 1500;
+    while (usuario.experiencia >= xpMaxNivel && usuario.nivel < 50) {
+      usuario.experiencia -= xpMaxNivel;
+      usuario.nivel += 1;
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: `🎉 *¡${usuario.nombre} ha subido al nivel ${usuario.nivel}! 🏆*`
+      }, { quoted: msg });
+      xpMaxNivel = usuario.nivel * 1500;
+    }
+
+    // Subida de rango
+    const rangos = [
+      { nivel: 1, rango: "🌟 Novato" },
+      { nivel: 5, rango: "⚔️ Ladrón Aprendiz" },
+      { nivel: 10, rango: "🔥 Criminal Experto" },
+      { nivel: 20, rango: "👑 Maestro del Robo" },
+      { nivel: 30, rango: "🌀 Señor del Crimen" },
+      { nivel: 40, rango: "💀 Rey de los Ladrones" },
+      { nivel: 50, rango: "🚀 Legendario" }
+    ];
+
+    let rangoAnterior = usuario.rango;
+    usuario.rango = rangos.reduce((acc, curr) => (usuario.nivel >= curr.nivel ? curr.rango : acc), usuario.rango);
+
+    if (usuario.rango !== rangoAnterior) {
+      await sock.sendMessage(msg.key.remoteJid, {
+        text: `🎖️ *¡${usuario.nombre} ha subido de rango a ${usuario.rango}!*`
+      }, { quoted: msg });
+    }
+
+    usuario.cooldowns = usuario.cooldowns || {};
+    usuario.cooldowns.robar = tiempoActual;
+
+    // Guardar cambios
+    fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+    
+  } catch (error) {
+    console.error("❌ Error en el comando .robar:", error);
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ *Ocurrió un error al intentar robar. Inténtalo de nuevo más tarde.*"
+    }, { quoted: msg });
+  }
+  break;
+}
+      
+case 'tran':
+case 'transferir': {
+  await sock.sendMessage(msg.key.remoteJid, { react: { text: "💱", key: msg.key } });
+
+  const amount = parseInt(args[0]);
+  if (!amount || amount <= 0) {
+    return await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Uso correcto: \`${global.prefix}tran <cantidad>\` (cita o menciona al usuario).` }, { quoted: msg });
+  }
+
+  const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+  const quotedParticipant = msg.message.extendedTextMessage?.contextInfo?.participant;
+  const targetJid = mentioned || quotedParticipant;
+  if (!targetJid) {
+    return await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ Debes citar o mencionar al usuario al que quieres transferir." }, { quoted: msg });
+  }
+
+  const senderJid = `${sender}@s.whatsapp.net`;
+  if (senderJid === targetJid) {
+    return await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ No puedes transferirte a ti mismo." }, { quoted: msg });
+  }
+
+  const rpgFile = "./rpg.json";
+  const rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
+  const usuarios = rpgData.usuarios || {};
+
+  // Validar que remitente y destinatario estén registrados
+  if (!usuarios[senderJid]) {
+    return await sock.sendMessage(msg.key.remoteJid, { text: `❌ No estás registrado en el gremio. Usa \`${global.prefix}rpg <nombre> <edad>\` para registrarte.` }, { quoted: msg });
+  }
+  if (!usuarios[targetJid]) {
+    return await sock.sendMessage(msg.key.remoteJid, { text: `❌ El usuario @${targetJid.split("@")[0]} no está registrado en el gremio.` }, { quoted: msg, mentions: [targetJid] });
+  }
+
+  const senderBalance = usuarios[senderJid].diamantes || 0;
+  if (senderBalance < amount) {
+    return await sock.sendMessage(msg.key.remoteJid, { text: `❌ No tienes suficientes diamantes. Tu saldo actual: ${senderBalance}` }, { quoted: msg });
+  }
+
+  // Realizar transferencia
+  usuarios[senderJid].diamantes -= amount;
+  usuarios[targetJid].diamantes += amount;
+  fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+
+  await sock.sendMessage(msg.key.remoteJid, {
+    text: `✅ Transferencia exitosa de *${amount}* diamante(s) a @${targetJid.split("@")[0]}.\n💎 Tu nuevo saldo: ${usuarios[senderJid].diamantes}`,
+    mentions: [targetJid]
+  }, { quoted: msg });
+
+  await sock.sendMessage(msg.key.remoteJid, { react: { text: "✅", key: msg.key } });
+  break;
+}
+case 'yts': 
+case 'ytsearch': {
+    const axios = require('axios');
+
+    if (!args.length) {
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}yts <query>\`` 
+        }, { quoted: msg });
+        return;
+    }
+
+    const query = args.join(' ');
+    const apiUrl = `https://api.dorratz.com/v3/yt-search?query=${encodeURIComponent(query)}`;
+
+    await sock.sendMessage(msg.key.remoteJid, { 
+        react: { text: "⏳", key: msg.key } 
+    });
+
+    try {
+        const response = await axios.get(apiUrl);
+        const { data } = response.data;
+
+        if (!data || data.length === 0) {
+            throw new Error('No se encontraron resultados para el texto proporcionado.');
+        }
+
+        let results = `🎬 *Resultados de búsqueda para:* ${query}\n\n`;
+        results += data.slice(0, 5).map((video, index) => `
+🔹 *Resultado ${index + 1}:*
+   > *Título:* ${video.title}
+   > *Canal:* ${video.author.name}
+   > *Publicado en:* ${video.publishedAt}
+   > *Duración:* ${video.duration}
+   > *Vistas:* ${video.views.toLocaleString()}
+   > *Enlace:* ${video.url}
+        `).join('\n\n');
+
+        const thumbnail = data[0].thumbnail;
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            image: { url: thumbnail },
+            caption: results,
+            mimetype: 'image/jpeg'
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "✅", key: msg.key } 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .yts:", error.message);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `❌ *Error al buscar en YouTube:*\n_${error.message}_` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "❌", key: msg.key } 
+        });
+    }
+    break;
+}
+case 'gifvideo': {
+    try {
+        // Reacción inicial
+        await sock.sendMessage(msg.key.remoteJid, {
+            react: { text: "🎞️", key: msg.key }
+        });
+
+        const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+
+        if (!quoted || !quoted.videoMessage) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: "⚠️ *Responde a un video para convertirlo en estilo GIF largo.*"
+            }, { quoted: msg });
+            return;
+        }
+
+        // Descargar el video citado
+        const stream = await downloadContentFromMessage(quoted.videoMessage, "video");
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        // Enviar como video estilo GIF largo (sin audio)
+        await sock.sendMessage(msg.key.remoteJid, {
+            video: buffer,
+            gifPlayback: true,
+            caption: "🎬 *Video convertido a estilo GIF largo* (sin audio)"
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error("❌ Error en .gifvideo:", error);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: "❌ *Ocurrió un error al procesar el video.*"
+        }, { quoted: msg });
+    }
+    break;
+}
+      
+case 'gremio': {
+    try {
+        const rpgFile = "./rpg.json";
+
+        // 🔄 Reacción inicial
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "🏰", key: msg.key }
+        });
+
+        // Verificar si existe el archivo RPG
+        if (!fs.existsSync(rpgFile)) {
+            await sock.sendMessage(msg.key.remoteJid, { 
+                text: "❌ *El gremio aún no tiene miembros.* Usa `" + global.prefix + "rpg <nombre> <edad>` para registrarte." 
+            }, { quoted: msg });
+            return;
+        }
+
+        // Leer datos del RPG
+        let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
+
+        if (!rpgData.usuarios || Object.keys(rpgData.usuarios).length === 0) {
+            await sock.sendMessage(msg.key.remoteJid, { 
+                text: "📜 *No hay miembros registrados en el Gremio Azura Ultra.*\nUsa `" + global.prefix + "rpg <nombre> <edad>` para unirte." 
+            }, { quoted: msg });
+            return;
+        }
+
+        let miembros = Object.values(rpgData.usuarios);
+        miembros.sort((a, b) => b.nivel - a.nivel); // Orden por nivel descendente
+
+        // Encabezado del mensaje con el total al principio
+        let listaMiembros = 
+`╔══════════════════╗  
+║ 🏰 *Gremio Azura Ultra* 🏰 ║  
+╚══════════════════╝  
+
+📋 *Total de miembros registrados:* ${miembros.length}\n`;
+
+        // Lista detallada de cada usuario
+        miembros.forEach((usuario, index) => {
+            const numMascotas = usuario.mascotas ? usuario.mascotas.length : 0;
+            const numPersonajes = usuario.personajes ? usuario.personajes.length : 0;
+
+            listaMiembros += `\n════════════════════\n`;
+            listaMiembros += `🔹 *${index + 1}.* ${usuario.nombre}\n`;
+            listaMiembros += `   🏅 *Rango:* ${usuario.rango}\n`;
+            listaMiembros += `   🎚️ *Nivel:* ${usuario.nivel}\n`;
+            listaMiembros += `   🎂 *Edad:* ${usuario.edad} años\n`;
+            listaMiembros += `   🐾 *Mascotas:* ${numMascotas}\n`;
+            listaMiembros += `   🎭 *Personajes:* ${numPersonajes}\n`;
+        });
+
+        // Enviar resultado con fondo animado
+        await sock.sendMessage(msg.key.remoteJid, { 
+            video: { url: "https://cdn.dorratz.com/files/1740565316697.mp4" }, 
+            gifPlayback: true, 
+            caption: listaMiembros 
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .gremio:", error);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: "❌ *Hubo un error al obtener la lista del gremio. Inténtalo de nuevo.*" 
+        }, { quoted: msg });
+    }
+    break;
+}
+      
+case 'infogrupo': {
+  // Verifica que el comando se ejecute en un grupo
+  if (!msg.key.remoteJid.endsWith("@g.us")) {
+    await sock.sendMessage(msg.key.remoteJid, { 
+      text: "⚠️ *Este comando solo funciona en grupos.*" 
+    }, { quoted: msg });
+    return;
+  }
+  
+  // Envía reacción inicial
+  await sock.sendMessage(msg.key.remoteJid, { 
+    react: { text: "🔍", key: msg.key } 
+  });
+  
+  try {
+    // Obtiene la metadata del grupo
+    let meta = await sock.groupMetadata(msg.key.remoteJid);
+    let subject = meta.subject || "Sin nombre";
+    let description = meta.desc || "No hay descripción.";
+    
+    // Construye el mensaje de información del grupo
+    let messageText = `*Información del Grupo:*\n\n*Nombre:* ${subject}\n*Descripción:* ${description}`;
+    
+    // Envía el mensaje con la información
+    await sock.sendMessage(msg.key.remoteJid, { text: messageText }, { quoted: msg });
+    
+    // Envía reacción final de éxito
+    await sock.sendMessage(msg.key.remoteJid, { 
+      react: { text: "✅", key: msg.key } 
+    });
+  } catch (err) {
+    console.error("Error en el comando infogrupo:", err);
+    await sock.sendMessage(msg.key.remoteJid, { 
+      text: "❌ *Error al obtener la información del grupo.*" 
     }, { quoted: msg });
   }
   break;
@@ -411,9 +2759,63 @@ case 'tovideo': {
     }
     break;
 }  
+case 'vision2':
+case 'visión2': {
+    const fetch = require('node-fetch');
 
+    if (!args.length) {
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}visión mujer cabello plateado\`` 
+        }, { quoted: msg });
+        return;
+    }
 
- case 'spotify': {
+    const query = args.join(" ");
+    const apiUrl = `https://api.neoxr.eu/api/ai-anime?q=${encodeURIComponent(query)}&apikey=russellxz`;
+
+    await sock.sendMessage(msg.key.remoteJid, { 
+        react: { text: "⏳", key: msg.key } 
+    });
+
+    try {
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+            throw new Error(`Error de la API: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.status || !data.data || !data.data.url) {
+            throw new Error("No se pudo generar la imagen.");
+        }
+
+        const imageUrl = data.data.url;
+        const caption = `🎨 *Prompt:* ${data.data.prompt}\n🔗 *Enlace de la imagen:* ${imageUrl}`;
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            image: { url: imageUrl },
+            caption: caption,
+            mimetype: 'image/png'
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "✅", key: msg.key } 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .visión:", error.message);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `❌ *Error al generar la imagen:*\n_${error.message}_\n\n🔹 Inténtalo más tarde.` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "❌", key: msg.key } 
+        });
+    }
+    break;
+}
+case 'spotify': {
     const fetch = require('node-fetch');
 
     if (!text) {
@@ -434,7 +2836,7 @@ case 'tovideo': {
     });
 
     try {
-        const apiUrl = `https://exonity.tech/api/dl/spotifydl?url=${encodeURIComponent(text)}`;
+        const apiUrl = `https://api.neoxr.eu/api/spotify?url=${encodeURIComponent(text)}&apikey=russellxz`;
         const response = await fetch(apiUrl);
 
         if (!response.ok) {
@@ -443,24 +2845,24 @@ case 'tovideo': {
 
         const data = await response.json();
 
-        if (data.status !== 200 || !data.result || !data.result.download) {
+        if (!data.status || !data.data || !data.data.url) {
             throw new Error("No se pudo obtener el enlace de descarga.");
         }
 
-        const songInfo = data.result;
+        const songInfo = data.data;
 
         const caption = `🎵 *Título:* ${songInfo.title}\n` +
-                        `🎤 *Artista:* ${songInfo.artis}\n` +
-                        `⏱️ *Duración:* ${Math.floor(songInfo.durasi / 1000)} segundos\n` +
-                        `🔗 *Enlace de descarga:* ${songInfo.download}`;
+                        `🎤 *Artista:* ${songInfo.artist.name}\n` +
+                        `⏱️ *Duración:* ${songInfo.duration}\n` +
+                        `🔗 *Enlace de descarga:* ${songInfo.url}`;
 
         await sock.sendMessage(msg.key.remoteJid, {
-            image: { url: songInfo.image },
+            image: { url: songInfo.thumbnail },
             caption: caption,
             mimetype: 'image/jpeg'
         }, { quoted: msg });
 
-        const audioResponse = await fetch(songInfo.download);
+        const audioResponse = await fetch(songInfo.url);
         if (!audioResponse.ok) {
             throw new Error("No se pudo descargar el archivo de audio.");
         }
@@ -488,10 +2890,7 @@ case 'tovideo': {
         });
     }
     break;
-}     
-
-
-                
+}
 case 'mediafire': {
     const fetch = require('node-fetch');
 
@@ -516,7 +2915,7 @@ case 'mediafire': {
     const mediafireUrl = text;
 
     try {
-        const apiUrl = `https://exonity.tech/api/dl/mediafire?url=${encodeURIComponent(mediafireUrl)}`;
+        const apiUrl = `https://api.neoxr.eu/api/mediafire?url=${encodeURIComponent(mediafireUrl)}&apikey=russellxz`;
         const response = await fetch(apiUrl);
 
         if (!response.ok) {
@@ -525,29 +2924,29 @@ case 'mediafire': {
 
         const data = await response.json();
 
-        if (data.status !== 200 || !data.result || !data.result.download) {
+        if (!data.status || !data.data || !data.data.url) {
             throw new Error("No se pudo obtener el enlace de descarga.");
         }
 
-        const fileInfo = data.result;
-        const fileResponse = await fetch(fileInfo.download);
+        const fileInfo = data.data;
+        const fileResponse = await fetch(fileInfo.url);
         if (!fileResponse.ok) {
             throw new Error("No se pudo descargar el archivo.");
         }
 
         const fileBuffer = await fileResponse.buffer();
-        const caption = `📂 *Nombre del archivo:* ${fileInfo.filename}\n` +
-                        `📦 *Tipo:* ${fileInfo.type}\n` +
-                        `📏 *Tamaño:* ${fileInfo.size}\n` +
-                        `📅 *Subido:* ${fileInfo.uploaded}\n`;
+        const caption = `📂 *Nombre del archivo:* ${fileInfo.title}\n` +
+                        `📦 *Tamaño:* ${fileInfo.size}\n` +
+                        `📏 *Tipo:* ${fileInfo.mime}\n` +
+                        `🔗 *Extensión:* ${fileInfo.extension}\n`;
 
         await sock.sendMessage(msg.key.remoteJid, { 
             text: caption 
         }, { quoted: msg });
         await sock.sendMessage(msg.key.remoteJid, {
             document: fileBuffer,
-            mimetype: fileInfo.mimetype,
-            fileName: fileInfo.filename
+            mimetype: fileInfo.mime,
+            fileName: fileInfo.title
         }, { quoted: msg });
 
         await sock.sendMessage(msg.key.remoteJid, { 
@@ -566,633 +2965,10 @@ case 'mediafire': {
     }
     break;
 }
-case 'play4': {
-    const fetch = require('node-fetch');
-    const fs = require('fs');
-    const path = require('path');
-
-    if (!text) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ Uso incorrecto del comando.\n\n📌 Ejemplo: *${prefix}play4* DJ Papa Liat`
-        }, { quoted: msg });
-        return;
-    }
-
-    // Reacción de carga ⏳
-    await sock.sendMessage(msg.key.remoteJid, {
-        react: { text: '⏳', key: msg.key }
-    });
-
-    const isUrl = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)/.test(text);
-    const apiKey = 'ex-f631534532';
-    let downloadLink, title, thumb, caption = '';
-
-    try {
-        if (isUrl) {
-            // Si se ingresa una URL, usamos directamente el endpoint ytmp42
-            const apiUrl = `https://exonity.tech/api/dl/ytmp4?url=${encodeURIComponent(text)}&apikey=${zrapi}`;
-            const response = await fetch(apiUrl);
-            if (!response.ok) {
-                throw new Error('Error al obtener el video desde la API ytmp42');
-            }
-            const data = await response.json();
-            if (!data.status || !data.result || !data.result.dl) {
-                throw new Error('No se pudo obtener el enlace de descarga del video');
-            }
-            downloadLink = data.result.dl;
-            title = data.result.title || 'Video';
-        } else {
-            // Si se ingresa el nombre del video, usamos el endpoint playmp4 para obtener información
-            const query = encodeURIComponent(text);
-            const searchApiUrl = `https://exonity.tech/api/dl/playmp4?query=${query}`;
-            const searchResponse = await fetch(searchApiUrl);
-            if (!searchResponse.ok) {
-                throw new Error('Error al obtener los datos de la API playmp4');
-            }
-            const searchData = await searchResponse.json();
-            if (searchData.status !== 200 || !searchData.result || !searchData.result.video_url) {
-                throw new Error('No se pudo obtener el resultado de la búsqueda');
-            }
-            const searchResult = searchData.result;
-            title = searchResult.title || 'Video';
-            thumb = searchResult.thumb;
-            caption = `🎥 *Título:* ${searchResult.title}\n` +
-                      `🕒 *Duración:* ${searchResult.durasi}\n` +
-                      `👀 *Vistas:* ${searchResult.views}\n` +
-                      `📅 *Subido:* ${searchResult.upload}\n` +
-                      `🔗 *Enlace:* ${searchResult.video_url}`;
-            if (thumb) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    image: { url: thumb },
-                    caption: caption,
-                    mimetype: 'image/jpeg'
-                }, { quoted: msg });
-            }
-            // Usamos la URL del video obtenido para llamar al endpoint ytmp42
-            const ytmp42ApiUrl = `https://exonity.tech/api/dl/ytmp4?url=${encodeURIComponent(searchResult.video_url)}&apikey=${zrapi}`;
-            const ytmp42Response = await fetch(ytmp42ApiUrl);
-            if (!ytmp42Response.ok) {
-                throw new Error('Error al obtener el video desde la API ytmp42 para la búsqueda');
-            }
-            const ytmp42Data = await ytmp42Response.json();
-            if (!ytmp42Data.status || !ytmp42Data.result || !ytmp42Data.result.dl) {
-                throw new Error('No se pudo obtener el enlace de descarga del video desde ytmp42');
-            }
-            downloadLink = ytmp42Data.result.dl;
-        }
-
-        // Descargamos el video usando el enlace obtenido
-        const videoResponse = await fetch(downloadLink, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        if (!videoResponse.ok) throw new Error('Error al descargar el video');
-        const buffer = await videoResponse.buffer();
-
-        await sock.sendMessage(msg.key.remoteJid, {
-            video: buffer,
-            mimetype: 'video/mp4',
-            caption: `🎥 *Título:* ${title}`,
-            fileName: `${title}.mp4`
-        }, { quoted: msg });
-
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '✅', key: msg.key }
-        });
-
-    } catch (error) {
-        console.error(error);
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `❌ *Ocurrió un error:* ${error.message}\n\n🔹 Inténtalo de nuevo más tarde.`
-        }, { quoted: msg });
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '❌', key: msg.key }
-        });
-    }
-    break;
-}
-
-            
-case 'play': {
-    const fetch = require('node-fetch');
-    const fs = require('fs');
-    const path = require('path');
-    const ffmpeg = require('fluent-ffmpeg');
-    const { pipeline } = require('stream');
-    const { promisify } = require('util');
-    const streamPipeline = promisify(pipeline);
-
-    if (!text) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ *Uso incorrecto del comando.*\n\n📌 *Ejemplo:* *${global.prefix}play* La Factoria - Perdoname`
-        }, { quoted: msg });
-        return;
-    }
-
-    // Reacción de carga ⏳
-    await sock.sendMessage(msg.key.remoteJid, {
-        react: { text: '⏳', key: msg.key }
-    });
-
-    // Verificamos si el input es una URL de YouTube o una búsqueda por nombre
-    const isUrl = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)/.test(text);
-    let audioUrl, title, thumb, caption = '';
-
-    try {
-        if (isUrl) {
-            // Si se ingresa una URL, usamos directamente el endpoint ytmp3
-            const apiKey = 'ex-f631534532';
-            const apiUrl = `https://exonity.tech/api/dl/ytmp3?url=${encodeURIComponent(text)}&apikey=${zrapi}`;
-            const response = await fetch(apiUrl);
-            if (!response.ok) {
-                throw new Error('Error al obtener los datos de la API ytmp3');
-            }
-            const data = await response.json();
-            if (!data.status || !data.result || !data.result.dl) {
-                throw new Error('No se pudo obtener el enlace de descarga del audio');
-            }
-            audioUrl = data.result.dl;
-            title = data.result.title || 'Audio';
-        } else {
-            // Si se ingresa el nombre de la canción, usamos el endpoint playmp3 para obtener los datos
-            const query = encodeURIComponent(text);
-            const searchApiUrl = `https://exonity.tech/api/dl/playmp3?query=${query}`;
-            const searchResponse = await fetch(searchApiUrl);
-            if (!searchResponse.ok) {
-                throw new Error('Error al obtener los datos de la API playmp3');
-            }
-            const searchData = await searchResponse.json();
-            if (searchData.status !== 200 || !searchData.result || !searchData.result.video_url) {
-                throw new Error('No se pudo obtener el resultado de la búsqueda');
-            }
-            const searchResult = searchData.result;
-            title = searchResult.title || 'Audio';
-            thumb = searchResult.thumb;
-            caption =
-`╔═════════════════╗  
-║  𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟮.𝟬 𝗕𝗢𝗧  ║  
-╚═════════════════╝  
-
-🎼 *𝙏í𝙩𝙪𝙡𝙤:* ${searchResult.title}  
-⏱️ *𝘿𝙪𝙧𝙖𝙘𝙞ó𝙣:* ${searchResult.durasi}  
-👁️ *𝙑𝙞𝙨𝙩𝙖𝙨:* ${searchResult.views}  
-👤 *𝘼𝙪𝙩𝙤𝙧:* ${searchResult.uploader}  
-🔗 *𝙀𝙣𝙡𝙖𝙘𝙚:* ${searchResult.video_url}  
-
-📥 *𝘾𝙤𝙢𝙖𝙣𝙙𝙤𝙨 𝙙𝙚 𝙙𝙚𝙨𝙘𝙖𝙧𝙜𝙖:*  
-🎵 *Audio:* _${global.prefix}play nombre del video_  
-🎥 *Video:* _${global.prefix}play2 nombre del video_  
-
-⏳ *Por favor espera...*  
-🛠️ *Azura Ultra 2.0 Bot está descargando tu música...*  
-
-⎯⎯ *𝗔𝘇𝘂𝗋𝗮 𝗨𝗹𝘁𝗋𝗮 𝟮.𝟬 𝗕𝗼𝘁* ⎯⎯`;
-            if (thumb) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    image: { url: thumb },
-                    caption: caption,
-                    mimetype: 'image/jpeg'
-                }, { quoted: msg });
-            }
-            // Ahora usamos la URL del video obtenido para llamar al endpoint ytmp3
-            const apiKey = 'ex-f631534532';
-            const ytmp3ApiUrl = `https://exonity.tech/api/dl/ytmp3?url=${encodeURIComponent(searchResult.video_url)}&apikey=${zrapi}`;
-            const ytmp3Response = await fetch(ytmp3ApiUrl);
-            if (!ytmp3Response.ok) {
-                throw new Error('Error al obtener los datos de la API ytmp3 para la búsqueda');
-            }
-            const ytmp3Data = await ytmp3Response.json();
-            if (!ytmp3Data.status || !ytmp3Data.result || !ytmp3Data.result.dl) {
-                throw new Error('No se pudo obtener el enlace de descarga del audio desde ytmp3');
-            }
-            audioUrl = ytmp3Data.result.dl;
-        }
-
-        // Descargamos el archivo de audio
-        const tmpDir = path.join(__dirname, 'tmp');
-        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
-        const audioPath = path.join(tmpDir, `${Date.now()}.mp3`);
-        const audioResponse = await fetch(audioUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
-        if (!audioResponse.ok) throw new Error('Error al descargar el audio');
-        const fileStream = fs.createWriteStream(audioPath);
-        await streamPipeline(audioResponse.body, fileStream);
-
-        const fileSize = fs.statSync(audioPath).size;
-        if (fileSize < 10000) {
-            fs.unlinkSync(audioPath);
-            throw new Error('El archivo descargado es demasiado pequeño para ser válido.');
-        }
-
-        // Convertimos el audio usando FFmpeg para asegurar compatibilidad
-        const convertedAudioPath = path.join(tmpDir, `${Date.now()}_converted.mp3`);
-        await new Promise((resolve, reject) => {
-            ffmpeg(audioPath)
-                .audioCodec('libmp3lame')
-                .format('mp3')
-                .on('end', resolve)
-                .on('error', reject)
-                .save(convertedAudioPath);
-        });
-
-        // Enviamos el audio convertido
-        await sock.sendMessage(msg.key.remoteJid, {
-            audio: fs.readFileSync(convertedAudioPath),
-            mimetype: 'audio/mpeg',
-            ptt: false,
-            fileName: `${title}.mp3`
-        }, { quoted: msg });
-
-        // Eliminamos los archivos temporales
-        fs.unlinkSync(audioPath);
-        fs.unlinkSync(convertedAudioPath);
-
-        // Reacción final de éxito ✅
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '✅', key: msg.key }
-        });
-
-    } catch (error) {
-        console.error(error);
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `❌ *Ocurrió un error:* ${error.message}\n\n🔹 Inténtalo de nuevo más tarde.`,
-        }, { quoted: msg });
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '❌', key: msg.key }
-        });
-    }
-    break;
-}
-
-        
-            case 'ytmp42': {
-    const fs = require('fs');
-    const path = require('path');
-    const fetch = require('node-fetch');
-
-    if (!text) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ Uso incorrecto del comando.\n\n📌 Ejemplo: *${prefix}ytmp42* https://www.youtube.com/watch?v=ejemplo`
-        }, { quoted: msg });
-        return;
-    }
-
-    if (!/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)/.test(text)) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ Enlace no válido.\n\n📌 Asegúrese de ingresar una URL de YouTube válida.\n\nEjemplo: *${prefix}ytmp42* https://www.youtube.com/watch?v=ejemplo`
-        }, { quoted: msg });
-        return;
-    }
-
-    await sock.sendMessage(msg.key.remoteJid, {
-        react: { text: '⏳', key: msg.key }
-    });
-
-    const videoUrl = text;
-    const apiKey = 'ex-f631534532'; 
-    const apiUrl = `https://exonity.tech/api/dl/ytmp4?url=${encodeURIComponent(videoUrl)}&apikey=${apiKey}`;
-
-    try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error('Error al obtener el video desde la API');
-
-        const data = await response.json();
-
-        if (!data.status || !data.result || !data.result.dl) {
-            throw new Error('No se pudo obtener el enlace de descarga del video');
-        }
-
-        const videoUrl = data.result.dl;
-        const videoResponse = await fetch(videoUrl);
-        if (!videoResponse.ok) throw new Error('Error al descargar el video');
-
-        const buffer = await videoResponse.buffer();
-        await sock.sendMessage(msg.key.remoteJid, {
-            video: buffer,
-            mimetype: 'video/mp4',
-            caption: data.result.title
-        }, { quoted: msg });
-
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '✅', key: msg.key }
-        });
-
-    } catch (error) {
-        console.error(error);
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '❌', key: msg.key }
-        });
-    }
-    break;
-}
-
-case 'ytmp3': {
-    const fetch = require('node-fetch');
-    const fs = require('fs');
-    const path = require('path');
-    const ffmpeg = require('fluent-ffmpeg');
-    const { pipeline } = require('stream');
-    const { promisify } = require('util');
-    const streamPipeline = promisify(pipeline);
-
-    if (!text) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ *Uso incorrecto del comando.*\n\n📌 *Ejemplo:* *${global.prefix}ytmp3* https://www.youtube.com/watch?v=ejemplo`
-        }, { quoted: msg });
-        return;
-    }
-
-    if (!/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)/.test(text)) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ *Enlace no válido.*\n\n📌 *Asegúrese de ingresar una URL de YouTube válida.*\n\n📌 *Ejemplo:* *${global.prefix}ytmp3* https://www.youtube.com/watch?v=ejemplo`
-        }, { quoted: msg });
-        return;
-    }
-
-    // Reacción de carga ⏳
-    await sock.sendMessage(msg.key.remoteJid, {
-        react: { text: '⏳', key: msg.key }
-    });
-
-    const videoUrl = text;
-    const apiKey = 'ex-f631534532';
-    const apiUrl = `https://exonity.tech/api/dl/ytmp3?url=${encodeURIComponent(videoUrl)}&apikey=${apiKey}`;
-
-    try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error('Error al obtener el audio desde la API');
-
-        const data = await response.json();
-
-        if (!data.status || !data.result || !data.result.dl) {
-            throw new Error('No se pudo obtener el enlace de descarga del audio');
-        }
-
-        const audioUrl = data.result.dl;
-        const tmpDir = path.join(__dirname, 'tmp');
-        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
-
-        // Descarga el archivo original
-        const audioPath = path.join(tmpDir, `${Date.now()}.mp3`);
-        const audioResponse = await fetch(audioUrl);
-        if (!audioResponse.ok) throw new Error('Error al descargar el audio');
-
-        const fileStream = fs.createWriteStream(audioPath);
-        await streamPipeline(audioResponse.body, fileStream);
-
-        const fileSize = fs.statSync(audioPath).size;
-        if (fileSize < 10000) {
-            fs.unlinkSync(audioPath);
-            throw new Error('El archivo descargado es demasiado pequeño para ser válido.');
-        }
-
-        // Conversión del audio usando FFmpeg para asegurar compatibilidad
-        const convertedAudioPath = path.join(tmpDir, `${Date.now()}_converted.mp3`);
-        await new Promise((resolve, reject) => {
-            ffmpeg(audioPath)
-                .audioCodec('libmp3lame')
-                .format('mp3')
-                .on('end', resolve)
-                .on('error', reject)
-                .save(convertedAudioPath);
-        });
-
-        // Envío del audio convertido con el tipo de archivo correcto
-        await sock.sendMessage(msg.key.remoteJid, {
-            audio: fs.readFileSync(convertedAudioPath),
-            mimetype: 'audio/mpeg',
-            ptt: false,
-            fileName: `${data.result.title}.mp3`
-        }, { quoted: msg });
-
-        // Eliminamos los archivos temporales
-        fs.unlinkSync(audioPath);
-        fs.unlinkSync(convertedAudioPath);
-
-        // Reacción de éxito ✅
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '✅', key: msg.key }
-        });
-
-    } catch (error) {
-        console.error(error);
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `❌ *Ocurrió un error:* ${error.message}\n\n🔹 *Inténtalo de nuevo más tarde.*`
-        }, { quoted: msg });
-
-        // Reacción de error ❌
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '❌', key: msg.key }
-        });
-    }
-    break;
-}
-
+                
+                        
             
 
-case "git": {
-    try {
-        // Verificar que el comando solo lo use el owner
-        if (!isOwner(sender)) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: "⚠️ *Solo el propietario puede usar este comando.*"
-            }, { quoted: msg });
-            return;
-        }
-
-        // Verificar si se proporcionó un comando
-        if (!args[0]) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: "⚠️ *Debes especificar el nombre de un comando.*\nEjemplo: `.git rest`"
-            }, { quoted: msg });
-            return;
-        }
-
-        // Leer el archivo main.js
-        const mainFilePath = "./main.js";
-        if (!fs.existsSync(mainFilePath)) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: "❌ *Error:* No se encontró el archivo de comandos."
-            }, { quoted: msg });
-            return;
-        }
-
-        // Leer el contenido del archivo main.js
-        const mainFileContent = fs.readFileSync(mainFilePath, "utf-8");
-
-        // Buscar el comando solicitado
-        const commandName = args[0].toLowerCase();
-        const commandRegex = new RegExp(`case\\s+['"]${commandName}['"]:\\s*([\\s\\S]*?)\\s*break;`, "g");
-        const match = commandRegex.exec(mainFileContent);
-
-        if (!match) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ *Error:* No se encontró el comando *${commandName}* en el archivo main.js.`
-            }, { quoted: msg });
-            return;
-        }
-
-        // Extraer el código del comando
-        const commandCode = `📜 *Código del comando ${commandName}:*\n\n\`\`\`${match[0]}\`\`\``;
-
-        // Enviar el código como mensaje
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: commandCode
-        }, { quoted: msg });
-
-    } catch (error) {
-        console.error("❌ Error en el comando git:", error);
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: "❌ *Error al obtener el código del comando.*"
-        }, { quoted: msg });
-    }
-    break;
-}
-
-            
-            
-case 'play2': { 
-    const yts = require('yt-search'); 
-
-    if (!text || text.trim() === '') {
-        return sock.sendMessage(msg.key.remoteJid, { 
-            text: `⚠️ *Uso correcto del comando:*\n\n📌 Ejemplo: *${global.prefix}play2 boza yaya*\n🎬 _Proporciona el nombre o término de búsqueda del video._` 
-        });
-    } 
-
-    const query = args.join(' ') || text; 
-    let video = {}; 
-
-    try { 
-        const yt_play = await yts(query); 
-        if (!yt_play || yt_play.all.length === 0) {
-            return sock.sendMessage(msg.key.remoteJid, { 
-                text: '❌ *Error:* No se encontraron resultados para tu búsqueda. Intenta con otro término.' 
-            });
-        } 
-
-        const firstResult = yt_play.all[0]; 
-        video = { 
-            url: firstResult.url, 
-            title: firstResult.title, 
-            thumbnail: firstResult.thumbnail || 'default-thumbnail.jpg', 
-            timestamp: firstResult.duration.seconds, 
-            views: firstResult.views.toLocaleString(), 
-            author: firstResult.author.name, 
-        }; 
-    } catch { 
-        return sock.sendMessage(msg.key.remoteJid, { 
-            text: '❌ *Error:* Ocurrió un problema al buscar el video. Inténtalo de nuevo más tarde.' 
-        });
-    } 
-
-    function secondString(seconds) { 
-        const h = Math.floor(seconds / 3600); 
-        const m = Math.floor((seconds % 3600) / 60); 
-        const s = seconds % 60; 
-        return [h, m, s]
-            .map(v => v < 10 ? `0${v}` : v)
-            .filter((v, i) => v !== '00' || i > 0)
-            .join(':'); 
-    } 
-
-    // Reacción inmediata al comando
-    await sock.sendMessage(msg.key.remoteJid, {
-        react: { text: "🎬", key: msg.key } 
-    });
-
-    // Envío del mensaje completo con información y aviso de descarga en un solo mensaje
-    await sock.sendMessage(msg.key.remoteJid, { 
-        image: { url: video.thumbnail }, 
-        caption: 
-`╔════════════════╗  
-║  𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟮.𝟬 𝘽𝙊𝙏  ║  
-╚════════════════╝  
-
-🎬 *𝙏í𝙩𝙪𝙡𝙤:* ${video.title}  
-⏱️ *𝘿𝙪𝙧𝙖𝙘𝙞ó𝙣:* ${secondString(video.timestamp || 0)}  
-👁️ *𝙑𝙞𝙨𝙩𝙖𝙨:* ${video.views}  
-👤 *𝘼𝙪𝙩𝙤𝙧:* ${video.author || 'Desconocido'}  
-🔗 *𝙀𝙣𝙡𝙖𝙘𝙚:* ${video.url}  
-
-📥 *𝘾𝙤𝙢𝙖𝙣𝙙𝙤𝙨 𝙙𝙚 𝙙𝙚𝙨𝙘𝙖𝙧𝙜𝙖:*  
-🎬 *Video:* _${global.prefix}play2 nombre del video_  
-🎵 *Audio:* _${global.prefix}play nombre del video_  
-
-⏳ *Por favor espera...*  
-🛠️ *Azura Ultra 2.0 Bot está descargando tu video...*  
-
-⎯⎯⎯ *𝗔𝘇𝘂𝗿𝗮 𝗨𝗹𝘁𝗿𝗮 𝟮.𝟬 𝗕𝗼𝘁* ⎯⎯⎯`, 
-        footer: "𝘿𝙚𝙨𝙖𝙧𝙧𝙤𝙡𝙡𝙖𝙙𝙤 𝙥𝙤𝙧 𝙍𝙪𝙨𝙨𝙚𝙡𝙡 𝙓𝙕", 
-    }, { quoted: msg });
-
-    // Ejecutar el comando .ytmp4 directamente para iniciar la descarga
-    handleCommand(sock, msg, "ytmp4", [video.url]);
-
-    break; 
-}
-
-            
-case 'ytmp4': {
-    const fetch = require('node-fetch');
-    const savetube = require('savetubedl');
-
-    if (!text) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ Uso incorrecto del comando.\n\n📌 Ejemplo: *${prefix}ytmp4* https://www.youtube.com/watch?v=ejemplo`
-        }, { quoted: msg });
-        return;
-    }
-
-    if (!/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)/.test(text)) {
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ Enlace no válido.\n\n📌 Asegúrese de ingresar una URL de YouTube válida.\n\nEjemplo: *${prefix}ytmp4* https://www.youtube.com/watch?v=ejemplo`
-        }, { quoted: msg });
-        return;
-    }
-
-    await sock.sendMessage(msg.key.remoteJid, {
-        react: { text: '⏳', key: msg.key }
-    });
-
-    const videoUrl = text;
-
-    try {
-        const result = await savetube.ytdl(videoUrl, '1080');
-
-        if (!result.status || !result.response || !result.response.descarga) {
-            throw new Error();
-        }
-
-        const videoInfo = result.response;
-        const videoMinutes = videoInfo.duracion / 60;
-
-        let quality = '1080';
-        if (videoMinutes > 28) quality = '144';
-        else if (videoMinutes > 20) quality = '240';
-        else if (videoMinutes > 15) quality = '360';
-        else if (videoMinutes > 8) quality = '480';
-        else if (videoMinutes > 8) quality = '720';
-
-        const finalResult = await savetube.ytdl(videoUrl, quality);
-        if (!finalResult.status || !finalResult.response || !finalResult.response.descarga) {
-            throw new Error();
-        }
-
-        await sock.sendMessage(msg.key.remoteJid, {
-            video: { url: finalResult.response.descarga },
-            caption: `🎬 Aquí tiene su video en calidad ${quality}p.\n\nDisfrútelo y continúe explorando el mundo digital.\n\n© Azura Ultra 2.0 Bot`
-        }, { quoted: msg });
-
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '✅', key: msg.key }
-        });
-
-    } catch {
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '❌', key: msg.key }
-        });
-    }
-    break;
-}
 
 case 'totalper': {
   try {
@@ -1309,23 +3085,20 @@ case 'botname': {
 }
             
 case 'vergrupos': {
-  // Solo el owner puede usar este comando
   if (!global.isOwner(sender)) {
     await sock.sendMessage(msg.key.remoteJid, { text: "⚠️ Solo el owner puede usar este comando." });
     return;
   }
-  
-  // Agrega una reacción para indicar que el comando se ha activado
+
   await sock.sendMessage(msg.key.remoteJid, { react: { text: "👀", key: msg.key } });
-  
+
   const fs = require("fs");
   const activosPath = "./activos.json";
   let activos = {};
   if (fs.existsSync(activosPath)) {
     activos = JSON.parse(fs.readFileSync(activosPath, "utf-8"));
   }
-  
-  // Obtén todos los grupos en los que está el bot
+
   let groups;
   try {
     groups = await sock.groupFetchAllParticipating();
@@ -1334,46 +3107,43 @@ case 'vergrupos': {
     await sock.sendMessage(msg.key.remoteJid, { text: "❌ Error al obtener la lista de grupos." });
     return;
   }
-  
+
   let groupIds = Object.keys(groups);
   if (groupIds.length === 0) {
     await sock.sendMessage(msg.key.remoteJid, { text: "No estoy en ningún grupo." });
     return;
   }
-  
-  let messageText = "*📋 Lista de Grupos y Configuraciones Activas:*\n\n";
-  
+
+  let messageText = "*📋 Lista de Grupos y Estados Activos:*\n\n";
+
   for (const groupId of groupIds) {
     let subject = groupId;
     try {
       const meta = await sock.groupMetadata(groupId);
       subject = meta.subject || groupId;
-    } catch (e) {
-      console.error(`Error obteniendo metadata de ${groupId}:`, e);
-    }
-    
-    // Verifica las configuraciones por grupo en activos.json
-    let antiarabe = (activos.antiarabe && activos.antiarabe[groupId]) ? "✅" : "❌";
-    let antilink = (activos.antilink && activos.antilink[groupId]) ? "✅" : "❌";
-    let welcome = (activos.welcome && activos.welcome[groupId]) ? "✅" : "❌";
-    let modoadmins = (activos.modoAdmins && activos.modoAdmins[groupId]) ? "✅" : "❌";
-    // Modo privado es global
-    let modoPrivado = (activos.modoPrivado) ? "✅" : "❌";
-    
-    messageText += `*Nombre:* ${subject}\n`;
+    } catch (e) {}
+
+    const estado = (key) => (activos[key] && activos[key][groupId]) ? "✅" : "❌";
+    const globalEstado = (key) => (activos[key]) ? "✅" : "❌";
+
+    messageText += `*Grupo:* ${subject}\n`;
     messageText += `*ID:* ${groupId}\n`;
-    messageText += `*antiarabe:* ${antiarabe}\n`;
-    messageText += `*antilink:* ${antilink}\n`;
-    messageText += `*welcome:* ${welcome}\n`;
-    messageText += `*modoAdmins:* ${modoadmins}\n`;
-    messageText += `*modoPrivado (global):* ${modoPrivado}\n`;
-    messageText += "─────────────────\n";
+    messageText += `🔒 *modoAdmins:* ${estado("modoAdmins")}\n`;
+    messageText += `⛔ *apagado:* ${estado("apagado")}\n`;
+    messageText += `🚫 *antilink:* ${estado("antilink")}\n`;
+    messageText += `🧑‍🦱 *antiarabe:* ${estado("antiarabe")}\n`;
+    messageText += `🔞 *antiporno:* ${estado("antiporno")}\n`;
+    messageText += `🔄 *antidelete:* ${estado("antidelete")}\n`;
+    messageText += `🎮 *rpgazura:* ${estado("rpgazura")}\n`;
+    messageText += `🛑 *antis (spam stickers):* ${estado("antis")}\n`;
+    messageText += `👋 *welcome:* ${estado("welcome")}\n`;
+    messageText += `🌐 *modoPrivado (global):* ${globalEstado("modoPrivado")}\n`;
+    messageText += "───────────────────────\n";
   }
-  
-  // Envía la lista al owner
+
   await sock.sendMessage(msg.key.remoteJid, { text: messageText });
   break;
-}            
+}
         
 case 'bc': {
   // Verifica que el usuario sea owner
@@ -1506,40 +3276,41 @@ case 'allmenu': {
     try {
         const fs = require("fs");
 
-        // 📂 Ruta del archivo principal
+        // Verificar archivo de comandos
         const mainFilePath = "./main.js";
         if (!fs.existsSync(mainFilePath)) {
-            return sock.sendMessage(msg.key.remoteJid, { 
-                text: "❌ *Error:* No se encontró el archivo de comandos." 
-            }, { quoted: msg });
+            await sock.sendMessage2(
+                msg.key.remoteJid,
+                "❌ *Error:* No se encontró el archivo de comandos.",
+                msg
+            );
+            return;
         }
 
-        const chatId = msg.key.remoteJid; // Definir chatId correctamente
+        const chatId = msg.key.remoteJid;
 
-        // ✅ Enviar la reacción antes del mensaje
+        // Reacción inicial (se mantiene sendMessage normal)
         await sock.sendMessage(chatId, { 
             react: { text: "📜", key: msg.key }
         });
 
-        // 📥 Leer contenido del archivo
+        // Leer y procesar comandos
         const mainFileContent = fs.readFileSync(mainFilePath, "utf-8");
-
-        // 🔍 Extraer los nombres de los comandos dentro de `case 'comando':`
         const commandRegex = /case\s+['"]([^'"]+)['"]:/g;
         let commands = [];
         let match;
+
         while ((match = commandRegex.exec(mainFileContent)) !== null) {
             commands.push(match[1]);
         }
 
-        // 📊 Filtrar y ordenar los comandos
         commands = [...new Set(commands)].sort();
         let totalComandos = commands.length;
 
-        // 📜 Construir mensaje con diseño personalizado
-        let commandList = `╔════════════════════╗  
-║  𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟐.𝟎 𝘽𝙊𝙏  ║  
-╚════════════════════╝  
+        // Construir menú
+        let commandList = `╔════════════════╗  
+║  𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 ALL MENU            
+╚═════════════════╝  
         📜 *Menú Completo*  
 ━━━━━━━━━━━━━━━━━━━  
 📌 𝗧𝗢𝗧𝗔𝗟 𝗗𝗘 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦: ${totalComandos}  
@@ -1554,39 +3325,39 @@ case 'allmenu': {
 
         commandList += `━━━━━━━━━━━━━━━━━━━  
 👨‍💻 𝘿𝙚𝙨𝙖𝙧𝙧𝙤𝙡𝙡𝙖𝙙𝙤 𝙥𝙤𝙧 𝙍𝙪𝙨𝙨𝙚𝙡𝙡 𝙓𝙕  
-╭────────────────╮  
-│ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟐.𝟎 𝘽𝙊𝙏 │  
-╰────────────────╯`;
+╭─────────────╮  
+│    𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼    
+╰─────────────╯`;
 
-        // 📩 Enviar el mensaje con el GIF de fondo
-        await sock.sendMessage(chatId, {
-            video: { url: "https://cdn.dorratz.com/files/1741471441432.mp4" },
-            caption: commandList,
-            gifPlayback: true // Asegurar que el video se envíe como GIF
-        }, { quoted: msg });
-
+        // Enviar usando sendMessage2
+        await sock.sendMessage2(
+  chatId,
+  {
+    image: { url: "https://cdn.russellxz.click/9bd11d81.jpeg" }, 
+    caption: commandList 
+  },
+  msg 
+);
     } catch (error) {
-        console.error("❌ Error en el comando .allmenu:", error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Ocurrió un error al obtener la lista de comandos. Inténtalo de nuevo.*" 
-        }, { quoted: msg });
+        console.error("Error en comando allmenu:", error);
+        await sock.sendMessage2(
+            msg.key.remoteJid,
+            "❌ *Ocurrió un error al obtener la lista de comandos. Inténtalo de nuevo.*",
+            msg
+        );
     }
     break;
 }
-
 case 'menuowner': {
   try {
-    // Reacción inicial
     await sock.sendMessage(msg.key.remoteJid, {
       react: { text: "👑", key: msg.key }
     });
 
     const chatId = msg.key.remoteJid;
-
-    // Construcción del mensaje (tu texto de menú)
-    const captionText = `╔═══════════════╗  
-║     𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟮.𝟬 𝘽𝙊𝙏     ║  
-╚═══════════════╝  
+    const captionText = `╔═══════════╗  
+║    𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼      
+╚═══════════╝  
 
             𝐌𝐄𝐍𝐔 𝐎𝐖𝐍𝐄𝐑  
 ━━━━━━━━━━━━━━━━━━━━  
@@ -1596,6 +3367,11 @@ case 'menuowner': {
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯  
 ➠ ${global.prefix}bc  
 ➠ ${global.prefix}rest  
+➠ ${global.prefix}carga
+➠ ${global.prefix}cargabots
+➠ ${global.prefix}delsesion
+➠ ${global.prefix}delsubbots
+➠ ${global.prefix}deltmp
 ➠ ${global.prefix}modoprivado on/off  
 ➠ ${global.prefix}addmascota  
 ➠ ${global.prefix}addper  
@@ -1607,48 +3383,51 @@ case 'menuowner': {
 ➠ ${global.prefix}addlista  
 ➠ ${global.prefix}deletelista
 ➠ ${global.prefix}setprefix
+➠ ${global.prefix}re
+➠ ${global.prefix}antideletepri on o off
+➠ ${global.prefix}unre
+➠ ${global.prefix}apagar
+➠ ${global.prefix}prender
+
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯  
 
       𝗗𝗲𝘀𝗮𝗿𝗿𝗼𝗹𝗹𝗮𝗱𝗼 𝗽𝗼𝗿: ʳᵘˢˢᵉˡˡ ˣᶻ  
 
-         𝙖𝙯𝙪𝙧𝙖 𝙪𝙡𝙩𝙧𝙖 𝟮.𝟬 𝙗𝙤𝙩`;
+         𝙖𝙯𝙪𝙧𝙖 𝙪𝙡𝙩𝙧𝙖`;
 
-    // Descargamos el MP4 (para enviarlo como GIF)
-    const { data: bufferVideo } = await axios.get(
-      "https://cdn.dorratz.com/files/1741471185939.mp4",
+    const videoResponse = await axios.get(
+      "https://cdn.russellxz.click/83229a2d.jpeg",
       { responseType: 'arraybuffer' }
     );
 
-    // Enviamos el video como GIF
-    await sock.sendMessage(chatId, {
-      video: bufferVideo,
-      caption: captionText,
-      gifPlayback: true,
-      mimetype: "video/mp4"
-    }, { quoted: msg });
+await sock.sendMessage2(
+  chatId,
+  {
+    image: { url: "https://cdn.russellxz.click/83229a2d.jpeg" }, 
+    caption: captionText 
+  },
+  msg 
+);
 
   } catch (error) {
-    console.error("❌ Error en el comando menuowner:", error);
-    await sock.sendMessage(msg.key.remoteJid, {
-      text: "❌ Ocurrió un error al mostrar el menú Owner. Inténtalo de nuevo."
-    }, { quoted: msg });
+    console.error("Error en menuowner:", error);
+    await sock.sendMessage2(
+      msg.key.remoteJid,
+      "❌ Ocurrió un error al mostrar el menú Owner",
+      msg
+    );
   }
   break;
 }
-
-        
 case 'menurpg': {
   try {
-    // Reacción inicial (opcional)
     await sock.sendMessage(msg.key.remoteJid, {
       react: { text: "⚔️", key: msg.key }
     });
 
     const chatId = msg.key.remoteJid;
-
-    // Construcción del mensaje (tu texto de menú)
-    const captionText = `╔═════════════════╗  
-║   𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 2.0 𝘽𝙊𝙏   ║  
+    const menuText = `╔═════════════════╗  
+║  𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 MENU RPG       
 ╚═════════════════╝  
 
 ✦ 𝐁𝐈𝐄𝐍𝐕𝐄𝐍𝐈𝐃𝐎 𝐀𝐋 𝐌𝐄𝐍𝐔 𝐑𝐏𝐆 ✦  
@@ -1660,116 +3439,91 @@ Así te registras
 ━━━━━━━━━━━━━━━━━━  
 
 📌 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦 𝗗𝗘 𝗨𝗦𝗨𝗔𝗥𝗜𝗢𝗦  
-(Sube de nivel y de top)  
-➤ ${global.prefix}nivel  
-➤ ${global.prefix}picar  
-➤ ${global.prefix}minar  
-➤ ${global.prefix}minar2  
-➤ ${global.prefix}work  
-➤ ${global.prefix}crime  
-➤ ${global.prefix}robar  
-➤ ${global.prefix}cofre  
-➤ ${global.prefix}claim  
-➤ ${global.prefix}batallauser  
-➤ ${global.prefix}hospital  
-➤ ${global.prefix}hosp  
+➤ ${global.prefix}nivel ➤ ${global.prefix}picar  
+➤ ${global.prefix}minar ➤ ${global.prefix}minar2  
+➤ ${global.prefix}work ➤ ${global.prefix}crime  
+➤ ${global.prefix}robar ➤ ${global.prefix}cofre  
+➤ ${global.prefix}claim ➤ ${global.prefix}batallauser  
+➤ ${global.prefix}hospital ➤ ${global.prefix}hosp  
 
 📌 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦 𝗗𝗘 𝗣𝗘𝗥𝗦𝗢𝗡𝗔𝗝𝗘𝗦  
-(Sube de nivel a tu personaje y top)  
-➤ ${global.prefix}luchar  
-➤ ${global.prefix}poder  
-➤ ${global.prefix}volar  
-➤ ${global.prefix}otromundo  
-➤ ${global.prefix}otrouniverso  
-➤ ${global.prefix}mododios  
-➤ ${global.prefix}mododiablo  
-➤ ${global.prefix}podermaximo  
-➤ ${global.prefix}enemigos  
-➤ ${global.prefix}nivelper  
-➤ ${global.prefix}per  
-➤ ${global.prefix}bolasdeldragon  
-➤ ${global.prefix}vender  
-➤ ${global.prefix}quitarventa  
-➤ ${global.prefix}batallaanime  
-➤ ${global.prefix}comprar  
-➤ ${global.prefix}tiendaper
-➤ ${global.prefix}alaventa
+➤ ${global.prefix}luchar ➤ ${global.prefix}poder  
+➤ ${global.prefix}volar ➤ ${global.prefix}otromundo  
+➤ ${global.prefix}otrouniverso ➤ ${global.prefix}mododios  
+➤ ${global.prefix}mododiablo ➤ ${global.prefix}podermaximo  
+➤ ${global.prefix}enemigos ➤ ${global.prefix}nivelper  
+➤ ${global.prefix}per ➤ ${global.prefix}bolasdeldragon  
+➤ ${global.prefix}vender ➤ ${global.prefix}quitarventa  
+➤ ${global.prefix}batallaanime ➤ ${global.prefix}comprar  
+➤ ${global.prefix}tiendaper ➤ ${global.prefix}alaventa  
+➤ ${global.prefix}verper
 
 📌 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦 𝗗𝗘 𝗠𝗔𝗦𝗖𝗢𝗧𝗔𝗦  
-(Sube de nivel a tu mascota y top)  
-➤ ${global.prefix}daragua  
-➤ ${global.prefix}darcariño  
-➤ ${global.prefix}darcomida  
-➤ ${global.prefix}presumir  
-➤ ${global.prefix}cazar  
-➤ ${global.prefix}entrenar  
-➤ ${global.prefix}pasear  
-➤ ${global.prefix}supermascota  
-➤ ${global.prefix}mascota  
-➤ ${global.prefix}curar  
-➤ ${global.prefix}nivelmascota  
-➤ ${global.prefix}batallamascota  
-➤ ${global.prefix}compra  
-➤ ${global.prefix}tiendamascotas  
+➤ ${global.prefix}daragua ➤ ${global.prefix}darcariño  
+➤ ${global.prefix}darcomida ➤ ${global.prefix}presumir  
+➤ ${global.prefix}cazar ➤ ${global.prefix}entrenar  
+➤ ${global.prefix}pasear ➤ ${global.prefix}supermascota  
+➤ ${global.prefix}mascota ➤ ${global.prefix}curar  
+➤ ${global.prefix}nivelmascota ➤ ${global.prefix}batallamascota  
+➤ ${global.prefix}compra ➤ ${global.prefix}tiendamascotas  
+➤ ${global.prefix}vermascotas
 
-📌 𝗢𝗧𝗥𝗢𝗦 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦  
-➤ ${global.prefix}addmascota  
-➤ ${global.prefix}addper  
-➤ ${global.prefix}deleteuser  
-➤ ${global.prefix}deleteper  
-➤ ${global.prefix}deletemascota  
-➤ ${global.prefix}totalper
+📌 𝗢𝗧𝗥𝗢𝗦 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦
+➤ ${global.prefix}addmascota ➤ ${global.prefix}addper  
+➤ ${global.prefix}deleteuser ➤ ${global.prefix}deleteper  
+➤ ${global.prefix}deletemascota ➤ ${global.prefix}totalper  
+➤ ${global.prefix}tran ➤ ${global.prefix}transferir  
+➤ ${global.prefix}dame ➤ ${global.prefix}dep
+➤ ${global.prefix}bal ➤ ${global.prefix}saldo
+➤ ${global.prefix}retirar ➤ ${global.prefix}depositar
+➤ ${global.prefix}retirar ➤ ${global.prefix}delrpg
+➤ ${global.prefix}rpgazura on o off
 
 📌 𝗖𝗢𝗠𝗔𝗡𝗗𝗢𝗦 𝗗𝗘 𝗧𝗢𝗣  
-➤ ${global.prefix}topuser  
-➤ ${global.prefix}topmascotas  
+➤ ${global.prefix}topuser ➤ ${global.prefix}topmascotas  
 ➤ ${global.prefix}topper  
 
 ━━━━━━━━━━━━━━━━━━  
-𝗗𝗘𝗦𝗔𝗥𝗥𝗢𝗟𝗟𝗔𝗗𝗢 𝗣𝗢𝗥: russell xz
+𝗗𝗘𝗦𝗔𝗥𝗥𝗢𝗟𝗟𝗔𝗗𝗢 𝗣𝗢𝗥: russell xz  
 
-╭────────────────╮  
-│ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 2.0 𝘽𝙊𝙏 │  
-╰────────────────╯`;
+╭────────────╮  
+│ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼          
+╰────────────╯`;
 
-    // Descarga el MP4 con axios
-    const { data: bufferVideo } = await axios.get(
-      "https://cdn.dorratz.com/files/1741474416069.mp4", 
-      { responseType: 'arraybuffer' }
-    );
+    const videoUrl = "https://cdn.russellxz.click/0abb8549.jpeg";
+    const videoBuffer = (await axios.get(videoUrl, { responseType: 'arraybuffer' })).data;
 
-    // Enviar el "video" como si fuera GIF
-    await sock.sendMessage(chatId, {
-      video: bufferVideo,
-      caption: captionText,
-      gifPlayback: true,
-      mimetype: "video/mp4"
-    }, { quoted: msg });
+await sock.sendMessage2(
+  chatId,
+  {
+    image: { url: "https://cdn.russellxz.click/0abb8549.jpeg" }, 
+    caption: menuText
+  },
+  msg 
+);
 
   } catch (error) {
-    console.error("❌ Error en el comando menurpg:", error);
-    await sock.sendMessage(msg.key.remoteJid, {
-      text: "❌ Ocurrió un error al mostrar el menú RPG. Inténtalo de nuevo."
-    }, { quoted: msg });
+    console.error("Error en menurpg:", error);
+    await sock.sendMessage2(
+      msg.key.remoteJid,
+      "❌ Error al mostrar el menú RPG",
+      msg
+    );
   }
   break;
-}
-
-        
+}        
 case 'menu': {
   try {
-    // Reacción inicial
+    // Reacción inicial (se mantiene sendMessage normal)
     await sock.sendMessage(msg.key.remoteJid, {
       react: { text: "📜", key: msg.key }
     });
 
     const chatId = msg.key.remoteJid;
-
-    // Diseño original con letra más pequeña y ajustado para WhatsApp
-    const captionText = `╔═══════════════╗  
-║   𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀 𝟐.𝟎   ║  
-║   🤖 𝘼𝙎𝙄𝙎𝙏𝙀𝙉𝙏𝙀 🤖   ║  
-╚═══════════════╝  
+    const captionText = `╔═════════════╗  
+║ 𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀  
+║   🤖 𝘼𝙎𝙄𝙎𝙏𝙀𝙉𝙏𝙀 🤖     
+╚═════════════╝  
 
 ╭──────────────╮  
 │ ✦ 𝙈𝙀𝙉𝙐 𝙂𝙀𝙉𝙀𝙍𝘼𝙇 ✦ │  
@@ -1779,103 +3533,215 @@ case 'menu': {
 ⎔ 𝗨𝘀𝗮 『${global.prefix}』 𝗮𝗻𝘁𝗲𝘀 𝗱𝗲 𝗰𝗮𝗱𝗮 𝗰𝗼𝗺𝗮𝗻𝗱𝗼.  
 
 ╭──────────────╮  
+│ ✦ 𝗨𝗡𝗘𝗧𝗘 𝗔 𝗡𝗨𝗘𝗦𝗧𝗥𝗢 𝗦𝗜𝗦𝗧𝗘𝗠𝗔 𝗗𝗘 𝗦𝗨𝗕𝗕𝗢𝗧𝗦(𝗛𝗔𝗭𝗧𝗘 𝗕𝗢𝗧) ✦ │  
+╰──────────────╯  
+
+👾 *Hazte subbot en nuestro sistema, te voy a mostrar la lista de comandos para gestiónar/hacerte subbot: 
+
+⎔ ${global.prefix}serbot / ${global.prefix}jadibot
+⎔ ${global.prefix}sercode / ${global.prefix}code
+⎔ ${global.prefix}delbots
+° mas comandos en el menu de subbots...
+
+╭──────────────╮  
+│ ✦ 𝙄𝙉𝙁𝙊𝙍𝙈𝘼𝘾𝙄𝙊𝙉 ✦ │  
+╰──────────────╯
+
+⎔ ${global.prefix}speedtest  
+⎔ ${global.prefix}ping  
+⎔ ${global.prefix}creador    
+
+╭──────────────╮  
 │ ✦ 𝙈𝙀𝙉𝙐𝙎 𝘿𝙄𝙎𝙋𝙊𝙉𝙄𝘽𝙇𝙀𝙎 ✦ │  
 ╰──────────────╯  
 ⎔ ${global.prefix}allmenu  
 ⎔ ${global.prefix}menugrupo  
-⎔ ${global.prefix}menu2  
+⎔ ${global.prefix}menuaudio  
 ⎔ ${global.prefix}menurpg  
 ⎔ ${global.prefix}info  
 ⎔ ${global.prefix}menuowner  
+⎔ ${global.prefix}menufree
+
+╭──────────────╮  
+│ ✦ PARA VENTAS ✦ │  
+╰──────────────╯  
+⎔ ${global.prefix}setstock
+⎔ ${global.prefix}stock
+⎔ ${global.prefix}setnetflix
+⎔ ${global.prefix}netflix
+⎔ ${global.prefix}setpago
+⎔ ${global.prefix}pago
+⎔ ${global.prefix}setcombos
+⎔ ${global.prefix}setreglas
+⎔ ${global.prefix}reglas
+⎔ ${global.prefix}combos
+⎔ ${global.prefix}sorteo
+⎔ ${global.prefix}setpeliculas
+⎔ ${global.prefix}peliculas
+⎔ ${global.prefix}settramites
+⎔ ${global.prefix}tramites
+⎔ ${global.prefix}setcanvas
+⎔ ${global.prefix}canvas
+
+╭──────────────╮  
+│ ✦ 𝙄𝘼 - 𝘾𝙃𝘼𝙏 𝘽𝙊𝙏 ✦ │  
+╰──────────────╯  
+⎔ ${global.prefix}gemini  
+⎔ ${global.prefix}chatgpt
+⎔ ${global.prefix}dalle
+⎔ ${global.prefix}visión 
+⎔ ${global.prefix}simi
+⎔ ${global.prefix}visión2
+⎔ ${global.prefix}chat on o off
+⎔ ${global.prefix}lumi on o off
+⎔ ${global.prefix}luminai
 
 ╭──────────────╮  
 │ ✦ 𝘿𝙀𝙎𝘾𝘼𝙍𝙂𝘼 ✦ │  
 ╰──────────────╯  
 ⎔ ${global.prefix}play → título  
+⎔ ${global.prefix}playdoc → título  
 ⎔ ${global.prefix}play1 → título  
 ⎔ ${global.prefix}play2 → título  
-⎔ ${global.prefix}play4 → titulo
+⎔ ${global.prefix}play2doc → título  
+⎔ ${global.prefix}play3 spotify → titulo
+⎔ ${global.prefix}play5 → titulo
+⎔ ${global.prefix}play6 → titulo
 ⎔ ${global.prefix}ytmp3 → link  
+⎔ ${global.prefix}ytmp3doc → link
+⎔ ${global.prefix}ytmp35 → link  
+⎔ ${global.prefix}get → responder a un estado.
 ⎔ ${global.prefix}ytmp4 → link  
-⎔ ${global.prefix}ytmp42 → link  
+⎔ ${global.prefix}ytmp4doc → link  
+⎔ ${global.prefix}ytmp45 → link  
 ⎔ ${global.prefix}tiktok → link  
 ⎔ ${global.prefix}fb → link  
 ⎔ ${global.prefix}ig → link  
 ⎔ ${global.prefix}spotify → link
 ⎔ ${global.prefix}mediafire → link
+⎔ ${global.prefix}apk → título
 
 ╭──────────────╮  
-│ ✦ 𝙊𝙏𝙍𝙊𝙎 𝘾𝙊𝙈𝘼𝙉𝘿𝙊𝙎 ✦ │  
+│ ✦ 𝘽𝙐𝙎𝘾𝘼𝘿𝙊𝙍𝙀𝙎  ✦ │  
 ╰──────────────╯  
-⎔ ${global.prefix}ver  
-⎔ ${global.prefix}perfil  
-⎔ ${global.prefix}get  
-⎔ ${global.prefix}ping  
-⎔ ${global.prefix}creador  
-⎔ ${global.prefix}toimg  
-⎔ ${global.prefix}personalidad  
-⎔ ${global.prefix}ship  
-⎔ ${global.prefix}parejas  
-⎔ ${global.prefix}speedtest  
+
+⎔ ${global.prefix}pixai → titulo
+⎔ ${global.prefix}Tiktoksearch → título
+⎔ ${global.prefix}Yts → título
+⎔ ${global.prefix}tiktokstalk → usuario
+
+╭──────────────╮  
+│ ✦ 𝘾𝙊𝙉𝙑𝙀𝙍𝙏𝙄𝘿𝙊𝙍𝙀𝙎 ✦ │  
+╰──────────────╯ 
+ 
 ⎔ ${global.prefix}tomp3  
 ⎔ ${global.prefix}tts  
-⎔ ${global.prefix}visión  
-⎔ ${global.prefix}verdad  
-⎔ ${global.prefix}reto  
-⎔ ${global.prefix}géminis  
-⎔ ${global.prefix}gemini  
-⎔ ${global.prefix}chatgpt
-⎔ ${global.prefix}IA
-⎔ ${global.prefix}pixai  
+⎔ ${global.prefix}tovideo
+⎔ ${global.prefix}toimg
+⎔ ${global.prefix}gifvideo → responde a un video.
+⎔ ${global.prefix}ff
+⎔ ${global.prefix}ff2
+
+╭──────────────╮  
+│ ✦ 𝙎𝙏𝙄𝘾𝙆𝙀𝙍𝙎 ✦ │  
+╰──────────────╯  
+
+⎔ ${global.prefix}s
 ⎔ ${global.prefix}newpack
 ⎔ ${global.prefix}addsticker
 ⎔ ${global.prefix}listpacks
 ⎔ ${global.prefix}sendpack
-⎔ ${global.prefix}tiktokstalk
+⎔ ${global.prefix}qc
+⎔ ${global.prefix}qc2
+⎔ ${global.prefix}texto
+
+╭──────────────╮  
+│ ✦ 𝙃𝙀𝙍𝙍𝘼𝙈𝙄𝙀𝙉𝙏𝘼𝙎 ✦ │  
+╰──────────────╯  
+
+⎔ ${global.prefix}ver → responder a un mensaje  
+⎔ ${global.prefix}tourl → responder a una imagen/video/musica
+⎔ ${global.prefix}whatmusic → Responder a un audio(mp3)/video(mp4)
+⎔ ${global.prefix}perfil 
+⎔ ${global.prefix}get
+⎔ ${global.prefix}xxx
+⎔ ${global.prefix}carga
+⎔ ${global.prefix}addco
+⎔ ${global.prefix}delco
+
+╭──────────────╮  
+│ ✦ 𝙈𝙄𝙉𝙄 𝙅𝙐𝙀𝙂𝙊𝙎 ✦ │  
+╰──────────────╯  
+⎔ ${global.prefix}verdad  
+⎔ ${global.prefix}reto  
+⎔ ${global.prefix}personalidad  
+⎔ ${global.prefix}ship  
+⎔ ${global.prefix}parejas  
+⎔ ${global.prefix}menurpg
+
+╭──────────────╮  
+│ ✦ COMANDO +18 ✦ │  
+╰──────────────╯  
+⎔ ${global.prefix}videoxxx
+⎔ ${global.prefix}pornololi
+⎔ ${global.prefix}nsfwneko
+⎔ ${global.prefix}Nsfwwaifu
+⎔ ${global.prefix}Waifu
+⎔ ${global.prefix}Neko
 
 ╭─────────────────╮  
- ✦ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝟚.𝟘 𝙀𝙎𝙏Á 𝙀𝙉 𝘾𝙊𝙉𝙎𝙏𝘼𝙉𝙏𝙀 𝘿𝙀𝙎𝘼𝙍𝙍𝙊𝙇𝙇𝙊. 
+ ✦ 𝘼𝙕𝙐𝙍𝘼 𝙐𝙇𝙏𝙍𝘼 𝙀𝙎𝙏Á 𝙀𝙉 𝘾𝙊𝙉𝙎𝙏𝘼𝙉𝙏𝙀 𝘿𝙀𝙎𝘼𝙍𝙍𝙊𝙇𝙇𝙊. 
   𝙎𝙀 𝘼𝙂𝙍𝙀𝙂𝘼𝙍Á𝙉 𝙈Á𝙎 𝙁𝙐𝙉𝘾𝙄𝙊𝙉𝙀𝙎 𝙋𝙍𝙊𝙉𝙏𝙊.   
 ╰─────────────────╯  
 
 👨‍💻 𝘿𝙚𝙨𝙖𝙧𝙧𝙤𝙡𝙡𝙖𝙙𝙤 𝙥𝙤𝙧 𝙍𝙪𝙨𝙨𝙚𝙡𝙡 𝙓𝙕`;
 
-    // Enviar el video como GIF con el menú
-    await sock.sendMessage(chatId, {
-      video: { url: "https://cdn.dorratz.com/files/1740370321585.mp4" },
-      gifPlayback: true, // Se envía como GIF
-      caption: captionText
-    }, { quoted: msg });
+    // Enviar usando sendMessage2
+    await sock.sendMessage2(
+  chatId,
+  {
+    image: { url: "https://cdn.russellxz.click/752ef2f1.jpeg" }, 
+    caption: captionText 
+  },
+  msg 
+)
 
   } catch (error) {
-    console.error("❌ Error en el comando menu:", error);
-    await sock.sendMessage(msg.key.remoteJid, {
-      text: "❌ Ocurrió un error al mostrar el menú. Inténtalo de nuevo."
-    }, { quoted: msg });
+    console.error("Error en comando menu:", error);
+    await sock.sendMessage2(
+      msg.key.remoteJid,
+      "❌ *Ocurrió un error al mostrar el menú. Inténtalo de nuevo.*",
+      msg
+    );
   }
   break;
 }
-
 case 'menugrupo': {
   try {
-    // Reacción inicial
     await sock.sendMessage(msg.key.remoteJid, {
       react: { text: "📜", key: msg.key }
     });
 
     const chatId = msg.key.remoteJid;
-
-    // Construcción del mensaje
-    const captionText = `╔══════════════════╗  
-║   𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀 𝟐.𝟎   ║  
-║   🎭 𝙼𝙴𝙽𝚄 𝙳𝙴 𝙂ℝ𝚄𝙿𝙾 🎭   ║  
-╚══════════════════╝  
+    const captionText = `╔════════════════╗  
+║  𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀             
+║   🎭 𝙼𝙴𝙽𝚄 𝙳𝙴 𝙶ℝ𝚄𝙿𝙾 🎭    
+╚════════════════╝  
 
 🛠 𝐂𝐎𝐍𝐅𝐈𝐆𝐔𝐑𝐀𝐂𝐈Ó𝐍  
 ╭✦ ${global.prefix}setinfo  
+├✦ ${global.prefix}infogrupo
 ├✦ ${global.prefix}setname  
+├✦ ${global.prefix}delwelcome
+├✦ ${global.prefix}setwelcome
+├✦ ${global.prefix}antiporno on o off
+├✦ ${global.prefix}antidelete on o off
 ├✦ ${global.prefix}setfoto  
+├✦ ${global.prefix}setreglas
+├✦ ${global.prefix}reglas
 ├✦ ${global.prefix}welcome on/off  
+├✦ ${global.prefix}despedidas on/off
+├✦ ${global.prefix}modocaliente on/off
 ╰────────────────
 
 🔱 𝐀𝐃𝐌𝐈𝐍𝐈𝐒𝐓𝐑𝐀𝐂𝐈Ó𝐍  
@@ -1883,47 +3749,59 @@ case 'menugrupo': {
 ├✦ ${global.prefix}quitaradmins  
 ├✦ ${global.prefix}tag  
 ├✦ ${global.prefix}tagall  
-├✦ ${global.prefix}modoadmins  
+├✦ ${global.prefix}modoadmins on o off
 ├✦ ${global.prefix}invocar  
 ├✦ ${global.prefix}todos  
+├✦ ${global.prefix}totalmensaje
+├✦ ${global.prefix}fantasmas
+├✦ ${global.prefix}fankick
+├✦ ${global.prefix}okfan
+├✦ ${global.prefix}delete
 ├✦ ${global.prefix}damelink  
+├✦ ${global.prefix}mute
+├✦ ${global.prefix}unmute
+├✦ ${global.prefix}ban
+├✦ ${global.prefix}unban
+├✦ ${global.prefix}abrir/ automaticamente
+├✦ ${global.prefix}cerrar/ automaticamente
 ├✦ ${global.prefix}abrirgrupo  
 ╰✦ ${global.prefix}cerrargrupo  
 
 🛡 𝐒𝐄𝐆𝐔𝐑𝐈𝐃𝐀𝐃  
 ╭✦ ${global.prefix}antilink on/off  
 ├✦ ${global.prefix}antiarabe on/off  
+├✦ ${global.prefix}antis on/off  
+├✦ ${global.prefix}antidelete on/off
 ├✦ ${global.prefix}kick  
 ╰✦ ${global.prefix}add
 
 📌 𝐌Á𝐒 𝐂𝐎𝐌𝐀𝐍𝐃𝐎𝐒 𝐏𝐑Ó𝐗𝐈𝐌𝐀𝐌𝐄𝐍𝐓𝐄...
 
-⟢ 𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀 𝟐.𝟎 𝐁𝐎𝐓 ⟣`;
+⟢ 𝐀𝐙𝐔𝐑𝐀 𝐔𝐋𝐓𝐑𝐀 ⟣`;
 
-    // Descargamos el MP4 para enviarlo como GIF
-    const { data: bufferVideo } = await axios.get(
-      "https://cdn.dorratz.com/files/1741471817068.mp4", 
-      { responseType: 'arraybuffer' }
-    );
+    const videoResponse = await axios.get("https://cdn.russellxz.click/c113150e.jpeg", { 
+      responseType: 'arraybuffer' 
+    });
 
-    // Enviamos el video como GIF animado
-    await sock.sendMessage(chatId, {
-      video: bufferVideo,
-      caption: captionText,
-      gifPlayback: true,
-      mimetype: "video/mp4"
-    }, { quoted: msg });
+    await sock.sendMessage2(
+  chatId,
+  {
+    image: { url: "https://cdn.russellxz.click/c113150e.jpeg" }, 
+    caption: captionText 
+  },
+  msg
+)
 
   } catch (error) {
-    console.error("❌ Error en el comando menugrupo:", error);
-    await sock.sendMessage(msg.key.remoteJid, {
-      text: "❌ Ocurrió un error al mostrar el menú de grupo. Inténtalo de nuevo."
-    }, { quoted: msg });
+    console.error("Error en menugrupo:", error);
+    await sock.sendMessage2(
+      msg.key.remoteJid,
+      "❌ Ocurrió un error al mostrar el menú de grupo",
+      msg
+    );
   }
   break;
 }
-
-
             
 case 'setinfo': {
   try {
@@ -2670,127 +4548,43 @@ case 'personalidad': {
   break;
 }
         
-case 'tag': {
-  try {
-    const chatId = msg.key.remoteJid;
-    // Verificar que se use en un grupo
-    if (!chatId.endsWith("@g.us")) {
-      await sock.sendMessage(chatId, { text: "⚠️ Este comando solo se puede usar en grupos." }, { quoted: msg });
-      return;
-    }
-    
-    // Obtener metadata del grupo para extraer la lista de participantes (menciones)
-    const groupMetadata = await sock.groupMetadata(chatId);
-    const allMentions = groupMetadata.participants.map(p => p.id);
-    
-    let messageToForward = null;
-    let hasMedia = false;
-    
-    // Si se responde a un mensaje (reply)
-    if (msg.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-      const quoted = msg.message.extendedTextMessage.contextInfo.quotedMessage;
-      if (quoted.conversation) {
-        messageToForward = { text: quoted.conversation };
-      } else if (quoted.extendedTextMessage && quoted.extendedTextMessage.text) {
-        messageToForward = { text: quoted.extendedTextMessage.text };
-      } else if (quoted.imageMessage) {
-        // Descargar imagen
-        const stream = await downloadContentFromMessage(quoted.imageMessage, "image");
-        let buffer = Buffer.alloc(0);
-        for await (const chunk of stream) {
-          buffer = Buffer.concat([buffer, chunk]);
-        }
-        if (!buffer || buffer.length === 0) throw new Error("Image buffer is empty");
-        const mimetype = quoted.imageMessage.mimetype || "image/jpeg";
-        // Forzar caption como cadena vacía si no existe
-        const caption = quoted.imageMessage.caption ? quoted.imageMessage.caption : "";
-        messageToForward = { image: buffer, mimetype, caption };
-        hasMedia = true;
-      } else if (quoted.videoMessage) {
-        // Descargar video
-        const stream = await downloadContentFromMessage(quoted.videoMessage, "video");
-        let buffer = Buffer.alloc(0);
-        for await (const chunk of stream) {
-          buffer = Buffer.concat([buffer, chunk]);
-        }
-        if (!buffer || buffer.length === 0) throw new Error("Video buffer is empty");
-        const mimetype = quoted.videoMessage.mimetype || "video/mp4";
-        const caption = quoted.videoMessage.caption ? quoted.videoMessage.caption : "";
-        messageToForward = { video: buffer, mimetype, caption };
-        hasMedia = true;
-      } else if (quoted.stickerMessage) {
-        // Descargar sticker
-        const stream = await downloadContentFromMessage(quoted.stickerMessage, "sticker");
-        let buffer = Buffer.alloc(0);
-        for await (const chunk of stream) {
-          buffer = Buffer.concat([buffer, chunk]);
-        }
-        if (!buffer || buffer.length === 0) throw new Error("Sticker buffer is empty");
-        messageToForward = { sticker: buffer };
-        hasMedia = true;
-      } else if (quoted.documentMessage) {
-        // Descargar documento
-        const stream = await downloadContentFromMessage(quoted.documentMessage, "document");
-        let buffer = Buffer.alloc(0);
-        for await (const chunk of stream) {
-          buffer = Buffer.concat([buffer, chunk]);
-        }
-        if (!buffer || buffer.length === 0) throw new Error("Document buffer is empty");
-        const mimetype = quoted.documentMessage.mimetype || "application/pdf";
-        const caption = quoted.documentMessage.caption ? quoted.documentMessage.caption : "";
-        messageToForward = { document: buffer, mimetype, caption };
-        hasMedia = true;
-      } else {
-        messageToForward = { text: "" };
-      }
-    }
-    
-    // Si no se respondió a un mensaje pero hay texto ingresado, se usa ese texto
-    if (!hasMedia && args.join(" ").trim().length > 0) {
-      messageToForward = { text: args.join(" ") };
-    }
-    
-    // Si no se detectó ni texto ni multimedia, enviar advertencia
-    if (!messageToForward) {
-      await sock.sendMessage(chatId, { text: "⚠️ Debes responder a un mensaje o proporcionar un texto para reenviar." }, { quoted: msg });
-      return;
-    }
-    
-    // Enviar el mensaje con las menciones a todos (menciones "ocultas")
-    await sock.sendMessage(chatId, { ...messageToForward, mentions: allMentions }, { quoted: msg });
-  } catch (error) {
-    console.error("❌ Error en el comando tag:", error);
-    await sock.sendMessage(msg.key.remoteJid, { text: "❌ Ocurrió un error al ejecutar el comando tag." }, { quoted: msg });
-  }
-  break;
-}
-        
 case 'tagall':
 case 'invocar':
 case 'todos': {
   try {
-    // Verificar que se use en un grupo
     const chatId = msg.key.remoteJid;
-    if (!chatId.endsWith("@g.us")) {
+    const sender = (msg.key.participant || msg.key.remoteJid).replace(/[^0-9]/g, "");
+    const isGroup = chatId.endsWith("@g.us");
+    const isBotMessage = msg.key.fromMe;
+
+    // Reacción inicial
+    await sock.sendMessage(chatId, { react: { text: "🔊", key: msg.key } });
+
+    if (!isGroup) {
       await sock.sendMessage(chatId, { text: "⚠️ *Este comando solo se puede usar en grupos.*" }, { quoted: msg });
       return;
     }
 
-    // Obtener metadata del grupo para extraer participantes
+    // Obtener metadata del grupo y verificar si es admin
     const metadata = await sock.groupMetadata(chatId);
-    const participants = metadata.participants; // Array de objetos con { id, ... }
+    const participant = metadata.participants.find(p => p.id.includes(sender));
+    const isAdmin = participant?.admin === "admin" || participant?.admin === "superadmin";
 
-    // Construir la lista de menciones (cada línea con "➥ @<numero>")
-    const mentionList = participants
-      .map(p => `➥ @${p.id.split("@")[0]}`)
-      .join("\n");
+    if (!isAdmin && !isOwner(sender) && !isBotMessage) {
+      await sock.sendMessage(chatId, {
+        text: "❌ *Este comando solo puede usarlo un administrador o el dueño del bot.*"
+      }, { quoted: msg });
+      return;
+    }
 
-    // Obtener el mensaje extra (argumentos) que el usuario envía
+    const participants = metadata.participants;
+    const mentionList = participants.map(p => `➥ @${p.id.split("@")[0]}`).join("\n");
+    const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+    const args = messageText.trim().split(" ").slice(1);
     const extraMsg = args.join(" ");
 
-    // Construir el mensaje final con un diseño alitorio
     let finalMsg = "━〔 *📢 INVOCACIÓN 📢* 〕━➫\n";
-    finalMsg += "٩(͡๏̯͡๏)۶ Por Azura Ultra 2.0 Bot ٩(͡๏̯͡๏)۶\n";
+    finalMsg += "٩(͡๏̯͡๏)۶ Por Azura Ultra ٩(͡๏̯͡๏)۶\n";
     if (extraMsg.trim().length > 0) {
       finalMsg += `\n❑ Mensaje: ${extraMsg}\n\n`;
     } else {
@@ -2798,18 +4592,18 @@ case 'todos': {
     }
     finalMsg += mentionList;
 
-    // Obtener la lista de IDs completos para la mención
     const mentionIds = participants.map(p => p.id);
 
-    // Enviar el mensaje con el caption y la lista de menciones
-    await sock.sendMessage(chatId, { 
+    await sock.sendMessage(chatId, {
       text: finalMsg,
       mentions: mentionIds
     }, { quoted: msg });
 
   } catch (error) {
     console.error("❌ Error en el comando tagall:", error);
-    await sock.sendMessage(msg.key.remoteJid, { text: "❌ *Ocurrió un error al ejecutar el comando tagall.*" }, { quoted: msg });
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ *Ocurrió un error al ejecutar el comando tagall.*"
+    }, { quoted: msg });
   }
   break;
 }
@@ -3011,169 +4805,7 @@ case 'welcome': {
   }
   break;
 }
-        
-case 'robar': {
-  try {
-    const fs = require("fs");
-    const rpgFile = "./rpg.json";
-    const userId = msg.key.participant || msg.key.remoteJid;
-    const cooldownTime = 10 * 60 * 1000; // 10 minutos
-
-    // 🥷 Reacción inicial
-    await sock.sendMessage(msg.key.remoteJid, { react: { text: "🥷", key: msg.key } });
-
-    // Verificar si el archivo existe
-    if (!fs.existsSync(rpgFile)) {
-      return sock.sendMessage(msg.key.remoteJid, { text: "❌ *Los datos del RPG no están disponibles.*" }, { quoted: msg });
-    }
-    let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
-
-    // Verificar que el ladrón esté registrado
-    if (!rpgData.usuarios[userId]) {
-      return sock.sendMessage(
-        msg.key.remoteJid,
-        { text: `❌ *No tienes una cuenta registrada en el gremio Azura Ultra.*\n📜 Usa \`${global.prefix}rpg <nombre> <edad>\` para registrarte.` },
-        { quoted: msg }
-      );
-    }
-    let usuario = rpgData.usuarios[userId];
-
-    // Verificar que el ladrón tenga vida
-    if (usuario.vida <= 0) {
-      return sock.sendMessage(
-        msg.key.remoteJid,
-        { text: "🚑 *¡No puedes robar! Tu vida es 0. Usa \`${global.prefix}hospital\` para recuperarte.*" },
-        { quoted: msg }
-      );
-    }
-
-    let tiempoActual = Date.now();
-    if (usuario.cooldowns?.robar && (tiempoActual - usuario.cooldowns.robar) < cooldownTime) {
-      let tiempoRestante = ((usuario.cooldowns.robar + cooldownTime - tiempoActual) / (60 * 1000)).toFixed(1);
-      return sock.sendMessage(
-        msg.key.remoteJid,
-        { text: `⏳ *Debes esperar ${tiempoRestante} minutos antes de intentar otro robo.*` },
-        { quoted: msg }
-      );
-    }
-
-    // Obtener el ID de la víctima a partir de la cita o mención
-    let targetId = msg.message.extendedTextMessage?.contextInfo?.participant ||
-                   (msg.message.mentionedJid ? msg.message.mentionedJid[0] : null);
-    if (!targetId) {
-      return sock.sendMessage(
-        msg.key.remoteJid,
-        { text: `⚠️ *Debes citar o mencionar a la persona a la que quieres robar.*\nEjemplo: \`${global.prefix}robar @usuario\`` },
-        { quoted: msg }
-      );
-    }
-    if (!rpgData.usuarios[targetId]) {
-      return sock.sendMessage(
-        msg.key.remoteJid,
-        { text: `❌ *El usuario al que intentas robar no está registrado en el RPG.*` },
-        { quoted: msg }
-      );
-    }
-    let victima = rpgData.usuarios[targetId];
-
-    // Probabilidad: 50% de éxito
-    let exito = Math.random() < 0.5;
-
-    // Calcular vida perdida del ladrón
-    let vidaPerdida = exito
-      ? Math.floor(Math.random() * (10 - 5 + 1)) + 5   // 5-10 HP si tiene éxito
-      : Math.floor(Math.random() * (20 - 10 + 1)) + 10; // 10-20 HP si falla
-    usuario.vida = Math.max(0, usuario.vida - vidaPerdida);
-
-    // Variables para XP y diamantes
-    let xpRobado = 0;
-    let diamantesRobados = 0;
-    if (exito) {
-      xpRobado = Math.floor(Math.random() * (3000 - 500 + 1)) + 500; // entre 500 y 3000 XP
-      if (victima.diamantes > 0) {
-        diamantesRobados = Math.min(victima.diamantes, Math.floor(Math.random() * (1500 - 20 + 1)) + 20);
-      } else {
-        // Si la víctima no tiene diamantes, robar XP adicional
-        xpRobado += Math.floor(Math.random() * (1000 - 300 + 1)) + 300;
-      }
-      usuario.experiencia += xpRobado;
-      usuario.diamantes += diamantesRobados;
-      victima.diamantes = Math.max(0, victima.diamantes - diamantesRobados);
-      victima.experiencia = Math.max(0, victima.experiencia - xpRobado);
-    } else {
-      // En caso de fallo, el ladrón pierde XP entre 300 y 1000
-      let xpPerdido = Math.floor(Math.random() * (1000 - 300 + 1)) + 300;
-      usuario.experiencia = Math.max(0, usuario.experiencia - xpPerdido);
-    }
-
-    // Textos de resultado (con menciones)
-    const textosExito = [
-      `🥷 *${usuario.nombre} se infiltró y robó con éxito a @${victima.id.split('@')[0]}.*\n💎 *Robaste ${diamantesRobados} diamantes* y *${xpRobado} XP*`,
-      `💰 *Con astucia, ${usuario.nombre} engañó a @${victima.id.split('@')[0]} y se llevó un gran botín.*\n💎 *Robaste ${diamantesRobados} diamantes* y *${xpRobado} XP*`,
-      `🚀 *Con rapidez, ${usuario.nombre} sustrajo el botín de @${victima.id.split('@')[0]} sin ser detectado.*\n💎 *Robaste ${diamantesRobados} diamantes* y *${xpRobado} XP*`
-    ];
-    const textosFracaso = [
-      `🚔 *${usuario.nombre} fue atrapado en el intento de robo y perdió parte de su experiencia.*\n❤️ *Perdiste ${vidaPerdida} HP*`,
-      `🔒 *El plan falló: ${usuario.nombre} intentó robar a @${victima.id.split('@')[0]} y fue descubierto, perdiendo ${vidaPerdida} HP.*`
-    ];
-    let mensajeResultado = exito
-      ? textosExito[Math.floor(Math.random() * textosExito.length)]
-      : textosFracaso[Math.floor(Math.random() * textosFracaso.length)];
-
-    await sock.sendMessage(msg.key.remoteJid, { 
-      text: mensajeResultado, 
-      mentions: [userId, targetId] 
-    }, { quoted: msg });
-
-    // Incrementar habilidad con 30% de probabilidad (mensaje separado)
-    let habilidadesArray = Object.keys(usuario.habilidades);
-    if (habilidadesArray.length > 0 && Math.random() < 0.3) {
-      let habilidadSubida = habilidadesArray[Math.floor(Math.random() * habilidadesArray.length)];
-      usuario.habilidades[habilidadSubida].nivel += 1;
-      await sock.sendMessage(msg.key.remoteJid, { 
-        text: `🌟 *¡${usuario.nombre} ha mejorado su habilidad!* 🎯\n🔹 *${habilidadSubida}: Nivel ${usuario.habilidades[habilidadSubida].nivel}*`
-      }, { quoted: msg });
-    }
-
-    // Actualizar y manejar subida de nivel
-    let xpMaxNivel = usuario.nivel === 1 ? 1000 : usuario.nivel * 1500;
-    while (usuario.experiencia >= xpMaxNivel && usuario.nivel < 50) {
-      usuario.experiencia -= xpMaxNivel;
-      usuario.nivel += 1;
-      await sock.sendMessage(msg.key.remoteJid, { 
-          text: `🎉 *¡${usuario.nombre} ha subido al nivel ${usuario.nivel}! 🏆*`
-      }, { quoted: msg });
-      xpMaxNivel = usuario.nivel === 1 ? 1000 : usuario.nivel * 1500;
-    }
-
-    // Actualizar y manejar rangos
-    const rangos = [
-      { nivel: 1, rango: "🌟 Novato" },
-      { nivel: 5, rango: "⚔️ Ladrón Aprendiz" },
-      { nivel: 10, rango: "🔥 Criminal Experto" },
-      { nivel: 20, rango: "👑 Maestro del Robo" },
-      { nivel: 30, rango: "🌀 Señor del Crimen" },
-      { nivel: 40, rango: "💀 Rey de los Ladrones" },
-      { nivel: 50, rango: "🚀 Legendario" }
-    ];
-    let rangoAnterior = usuario.rango;
-    usuario.rango = rangos.reduce((acc, curr) => (usuario.nivel >= curr.nivel ? curr.rango : acc), usuario.rango);
-    if (usuario.rango !== rangoAnterior) {
-      await sock.sendMessage(msg.key.remoteJid, { 
-          text: `🎖️ *¡${usuario.nombre} ha subido de rango a ${usuario.rango}!* 🚀`
-      }, { quoted: msg });
-    }
-
-    usuario.cooldowns = usuario.cooldowns || {};
-    usuario.cooldowns.robar = tiempoActual;
-    fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
-    
-  } catch (error) {
-    console.error("❌ Error en el comando .robar:", error);
-  }
-  break;
-}
-        
+                
 case 'cofre': {
     try {
         const fs = require("fs");
@@ -3198,7 +4830,7 @@ case 'cofre': {
         let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
         if (!rpgData.usuarios[userId]) {
             return sock.sendMessage(msg.key.remoteJid, { 
-                text: `❌ *No tienes una cuenta registrada en el gremio Azura Ultra.*\n📜 Usa \`${global.prefix}rpg <nombre> <edad>\` para registrarte.` 
+                text: `❌ *No tienes una cuenta registrada en el gremio Azura Ultra & Cortana.*\n📜 Usa \`${global.prefix}rpg <nombre> <edad>\` para registrarte.` 
             }, { quoted: msg });
         }
         let usuario = rpgData.usuarios[userId];
@@ -4003,78 +5635,7 @@ case 'minar2': {
     break;
 }
         
-case 'topuser': {
-  try {
-    // Reacción inicial
-    await sock.sendMessage(msg.key.remoteJid, { 
-      react: { text: "🏆", key: msg.key } 
-    });
-    
-    const rpgFile = "./rpg.json";
-    if (!fs.existsSync(rpgFile)) {
-      return sock.sendMessage(msg.key.remoteJid, {
-        text: `❌ *No hay datos de RPG. Usa \`${global.prefix}crearcartera\` para empezar.*`
-      }, { quoted: msg });
-    }
-    
-    let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
-    let usuarios = rpgData.usuarios;
-    if (!usuarios || Object.keys(usuarios).length === 0) {
-      return sock.sendMessage(msg.key.remoteJid, {
-        text: "❌ *No hay usuarios registrados aún.*"
-      }, { quoted: msg });
-    }
-    
-    // Crear array para el ranking de usuarios basado en su nivel
-    let ranking = [];
-    for (let id in usuarios) {
-      let user = usuarios[id];
-      // Solo consideramos usuarios que tengan datos básicos de nivel y habilidades
-      if (typeof user.nivel === "number") {
-        let habilidades = Object.entries(user.habilidades || {})
-          .map(([key, value]) => `${key} (Nivel ${value.nivel || value})`)
-          .join(", ");
-        ranking.push({
-          id,
-          nombre: user.nombre,
-          nivel: user.nivel,
-          rango: user.rango || "Sin rango",
-          habilidades: habilidades || "Sin habilidades"
-        });
-      }
-    }
-    
-    // Ordenar el ranking por nivel descendente
-    ranking.sort((a, b) => b.nivel - a.nivel);
-    
-    // Construir mensaje del ranking
-    let mensajeRanking = "🏆 *Ranking de Jugadores* 🏆\n━━━━━━━━━━━━━━━━━━━━\n";
-    ranking.forEach((user, index) => {
-      mensajeRanking += `🥇 *#${index + 1} - @${user.id.split('@')[0]}*\n`;
-      mensajeRanking += `🎮 *Nivel:* ${user.nivel}\n`;
-      mensajeRanking += `📊 *Rango:* ${user.rango}\n`;
-      mensajeRanking += `⚡ *Habilidades:* ${user.habilidades}\n`;
-      mensajeRanking += "━━━━━━━━━━━━━━━━━━━━\n\n";
-    });
-    
-    // Enviar el ranking con la imagen de fondo
-    await sock.sendMessage(msg.key.remoteJid, { 
-      image: { url: "https://cdn.dorratz.com/files/1741194763651.jpg" },
-      caption: mensajeRanking,
-      mentions: ranking.map(u => u.id)
-    }, { quoted: msg });
-    
-  } catch (error) {
-    console.error("❌ Error en el comando .topuser:", error);
-    await sock.sendMessage(msg.key.remoteJid, { 
-      text: `❌ *Ocurrió un error al generar el ranking de jugadores. Inténtalo de nuevo.*`
-    }, { quoted: msg });
-    await sock.sendMessage(msg.key.remoteJid, { 
-      react: { text: "❌", key: msg.key }
-    });
-  }
-  break;
-}
+
 
 case 'topmascotas': {
   try {
@@ -5113,10 +6674,7 @@ case 'gomascota': {
     );
   }
   break;
-}
-    
-        
-            
+}          
         
 case 'addlista': {
   try {
@@ -8444,7 +10002,6 @@ case 'daragua': {
     break;
 }
         
-
         
 case 'hospital':
 case 'hosp': {
@@ -8956,7 +10513,7 @@ case 'verdad': {
 
         await sock.sendMessage(msg.key.remoteJid, {
             image: { url: 'https://cdn.dorratz.com/files/1740781671173.jpg' },
-            caption: `𝘏𝘢𝘴 𝘦𝘴𝘤𝘰𝘨𝘪𝘥𝘰 *𝘝𝘌𝘙𝘋𝘈𝘋*\n\n╱╲❀╱╲╱╲❀╱╲╱╲❀╱╲\n◆ ${verdad}\n╲╱❀╲╱╲╱❀╲╱╲╱❀╲╱\n\n© Azura Ultra 2.0 Bot`
+            caption: `𝘏𝘢𝘴 𝘦𝘴𝘤𝘰𝘨𝘪𝘥𝘰 *𝘝𝘌𝘙𝘋𝘈𝘋*\n\n╱╲❀╱╲╱╲❀╱╲╱╲❀╱╲\n◆ ${verdad}\n╲╱❀╲╱╲╱❀╲╱╲╱❀╲╱\n\n© Azura Ultra`
         }, { quoted: msg });
 
         // ✅ Reacción de éxito
@@ -8988,7 +10545,7 @@ case 'reto': {
 
         await sock.sendMessage(msg.key.remoteJid, {
             image: { url: 'https://cdn.dorratz.com/files/1740781675920.jpg' },
-            caption: `𝘏𝘢𝘴 𝘦𝘴𝘤𝘰𝘨𝘪𝘥𝘰 *𝘙𝘌𝘛𝘖*\n\n╱╲❀╱╲╱╲❀╱╲╱╲❀╱╲\n◆ ${reto}\n╲╱❀╲╱╲╱❀╲╱╲╱❀╲╱\n\n© Azura Ultra 2.0 Bot`
+            caption: `𝘏𝘢𝘴 𝘦𝘴𝘤𝘰𝘨𝘪𝘥𝘰 *𝘙𝘌𝘛𝘖*\n\n╱╲❀╱╲╱╲❀╱╲╱╲❀╱╲\n◆ ${reto}\n╲╱❀╲╱╲╱❀╲╱╲╱❀╲╱\n\n© Azura Ultra`
         }, { quoted: msg });
 
     } catch (e) {
@@ -9070,7 +10627,7 @@ case 'memes': {
 
         await sock.sendMessage(msg.key.remoteJid, {
             image: { url: meme },
-            caption: "🤣 *¡Aquí tienes un meme!*\n\n© Azura Ultra 2.0 Bot"
+            caption: "🤣 *¡Aquí tienes un meme!*\n\n© Azura Ultra"
         }, { quoted: msg });
 
     } catch (e) {
@@ -9150,13 +10707,145 @@ case 'hd': {
     }
     break;
 }
-
-
-case 'chatgpt':
-case 'ia': {
+case 'imagen': {
     const fetch = require('node-fetch');
 
-    if (!args.length) {
+    if (!text.length) {
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}imagen gatos\`` 
+        }, { quoted: msg });
+        return;
+    }
+
+    const query = args.join(" ");
+    const apiUrl = `https://api.neoxr.eu/api/goimg?q=${encodeURIComponent(query)}&apikey=russellxz`;
+
+    await sock.sendMessage(msg.key.remoteJid, { 
+        react: { text: "⏳", key: msg.key } 
+    });
+
+    try {
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+            throw new Error(`Error de la API: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.status || !data.data || data.data.length === 0) {
+            throw new Error("No se encontraron imágenes.");
+        }
+
+        const image = data.data[0]; // Tomar la primera imagen de la lista
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            image: { url: image.url },
+            caption: `🖼️ *Imagen de:* ${query}\n\n🔗 *Fuente:* ${image.origin.website.url}`,
+            mimetype: 'image/jpeg'
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "✅", key: msg.key } 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .imagen:", error.message);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `❌ *Error al obtener la imagen:*\n_${error.message}_\n\n🔹 Inténtalo más tarde.` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "❌", key: msg.key } 
+        });
+    }
+    break;
+}
+
+case 'apk': {
+    const fetch = require('node-fetch');
+
+    if (!text.length) {
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}apk whatsapp\`` 
+        }, { quoted: msg });
+        return;
+    }
+
+    const query = args.join(" ");
+    const apiUrl = `https://api.neoxr.eu/api/apk?q=${encodeURIComponent(query)}&no=1&apikey=russellxz`;
+
+    await sock.sendMessage(msg.key.remoteJid, { 
+        react: { text: "⏳", key: msg.key } 
+    });
+
+    try {
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+            throw new Error(`Error de la API: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.status || !data.data || !data.file || !data.file.url) {
+            throw new Error("No se pudo obtener información del APK.");
+        }
+
+        const apkInfo = data.data;
+        const apkFile = data.file;
+
+        const fileResponse = await fetch(apkFile.url);
+        if (!fileResponse.ok) {
+            throw new Error("No se pudo descargar el archivo APK.");
+        }
+
+        const fileBuffer = await fileResponse.buffer();
+
+        const caption = `📱 *Nombre:* ${apkInfo.name}\n` +
+                        `📦 *Tamaño:* ${apkInfo.size}\n` +
+                        `⭐ *Rating:* ${apkInfo.rating}\n` +
+                        `📥 *Instalaciones:* ${apkInfo.installs}\n` +
+                        `👨‍💻 *Desarrollador:* ${apkInfo.developer}\n` +
+                        `📂 *Categoría:* ${apkInfo.category}\n` +
+                        `🔄 *Versión:* ${apkInfo.version}\n` +
+                        `📅 *Actualizado:* ${apkInfo.updated}\n` +
+                        `📋 *Requisitos:* ${apkInfo.requirements}\n` +
+                        `🔗 *ID:* ${apkInfo.id}`;
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            image: { url: apkInfo.thumbnail },
+            caption: caption,
+            mimetype: 'image/jpeg'
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            document: fileBuffer,
+            mimetype: 'application/vnd.android.package-archive',
+            fileName: apkFile.filename
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "✅", key: msg.key } 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en el comando .apk:", error.message);
+        await sock.sendMessage(msg.key.remoteJid, { 
+            text: `❌ *Error al procesar la solicitud:*\n_${error.message}_\n\n🔹 Inténtalo más tarde.` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(msg.key.remoteJid, { 
+            react: { text: "❌", key: msg.key } 
+        });
+    }
+    break;
+}
+
+case 'chatgpt': {
+    const fetch = require('node-fetch');
+
+    if (!text.length) {
         await sock.sendMessage(msg.key.remoteJid, { 
             text: `⚠️ *Uso incorrecto.*\n📌 Ejemplo: \`${global.prefix}chatgpt Hola, ¿cómo estás?\`` 
         }, { quoted: msg });
@@ -9164,8 +10853,8 @@ case 'ia': {
     }
 
     const query = args.join(" ");
-    const apiUrl = `https://exonity.tech/api/ai/copilot?message=${encodeURIComponent(query)}`;
-    const userId = msg.key.participant || msg.key.remoteJid; // Obtener ID del usuario
+    const apiUrl = `https://api.neoxr.eu/api/gpt4-session?q=${encodeURIComponent(query)}&session=1727468410446638&apikey=russellxz`;
+    const userId = msg.key.participant || msg.key.remoteJid;
 
     await sock.sendMessage(msg.key.remoteJid, { 
         react: { text: "🤖", key: msg.key } 
@@ -9180,15 +10869,15 @@ case 'ia': {
 
         const data = await response.json();
 
-        if (data.status !== 200 || !data.result) {
-            throw new Error("No se pudo obtener una respuesta de ChatGPT.");
+        if (!data.status || !data.data || !data.data.message) {
+            throw new Error("No se pudo obtener una respuesta de GPT-4.");
         }
 
-        const respuestaChatGPT = data.result;
+        const respuestaGPT4 = data.data.message;
 
         await sock.sendMessage(msg.key.remoteJid, { 
-            text: `✨ *ChatGPT responde a @${userId.replace("@s.whatsapp.net", "")}:*\n\n${respuestaChatGPT}\n\n🔹 *Powered by Azura Ultra 2.0 Bot* 🤖`,
-            mentions: [userId] // Menciona al usuario en la respuesta
+            text: `✨ *GPT-4 responde a @${userId.replace("@s.whatsapp.net", "")}:*\n\n${respuestaGPT4}\n\n🔹 *Powered by Azura Ultra* 🤖`,
+            mentions: [userId] 
         }, { quoted: msg });
 
         await sock.sendMessage(msg.key.remoteJid, { 
@@ -9198,7 +10887,7 @@ case 'ia': {
     } catch (error) {
         console.error("❌ Error en el comando .chatgpt:", error.message);
         await sock.sendMessage(msg.key.remoteJid, { 
-            text: `❌ *Error al obtener respuesta de ChatGPT:*\n_${error.message}_\n\n🔹 Inténtalo más tarde.` 
+            text: `❌ *Error al obtener respuesta de GPT-4:*\n_${error.message}_\n\n🔹 Inténtalo más tarde.` 
         }, { quoted: msg });
 
         await sock.sendMessage(msg.key.remoteJid, { 
@@ -9207,7 +10896,7 @@ case 'ia': {
     }
     break;
 }
-            
+         
       case 'toaudio':
 case 'tomp3': {
     try {
@@ -9259,75 +10948,8 @@ case 'tomp3': {
     }
     break;
 }
-case "tiktok":
-case "tt":
-    if (!text) {
-        return sock.sendMessage(msg.key.remoteJid, {
-            text: `⚠️ *Ejemplo de uso:*\n📌 ${global.prefix + command} https://vm.tiktok.com/ZMjdrFCtg/`
-        });
-    }
 
-    if (!isUrl(args[0]) || !args[0].includes('tiktok')) {
-        return sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Enlace de TikTok inválido.*" 
-        }, { quoted: msg });
-    }
 
-    try {
-        // ⏱️ Reacción de carga mientras se procesa el comando
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: '⏱️', key: msg.key } 
-        });
-
-        const axios = require('axios');
-        const response = await axios.get(`https://api.dorratz.com/v2/tiktok-dl?url=${args[0]}`);
-
-        if (!response.data || !response.data.data || !response.data.data.media) {
-            throw new Error("La API no devolvió un video válido.");
-        }
-
-        const videoData = response.data.data;
-        const videoUrl = videoData.media.org;
-        const videoTitle = videoData.title || "Sin título";
-        const videoAuthor = videoData.author.nickname || "Desconocido";
-        const videoDuration = videoData.duration ? `${videoData.duration} segundos` : "No especificado";
-        const videoLikes = videoData.like || "0";
-        const videoComments = videoData.comment || "0";
-
-        // 📜 Mensaje con la información del video
-        let mensaje = `🎥 *Video de TikTok* 🎥\n\n`;
-        mensaje += `📌 *Título:* ${videoTitle}\n`;
-        mensaje += `👤 *Autor:* ${videoAuthor}\n`;
-        mensaje += `⏱️ *Duración:* ${videoDuration}\n`;
-        mensaje += `❤️ *Likes:* ${videoLikes} | 💬 *Comentarios:* ${videoComments}\n\n`;
-        
-        // 📢 Agregar la API utilizada y marca de agua con buen formato
-        mensaje += `───────\n🍧 *API utilizada:* https://api.dorratz.com\n`;
-        mensaje += `© Azura Ultra 2.0 Bot`;
-
-        // 📩 Enviar el video con la información
-        await sock.sendMessage(msg.key.remoteJid, {
-            video: { url: videoUrl },
-            caption: mensaje
-        }, { quoted: msg });
-
-        // ✅ Reacción de éxito
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "✅", key: msg.key } 
-        });
-
-    } catch (error) {
-        console.error("❌ Error en el comando .tiktok:", error.message);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Ocurrió un error al procesar el enlace de TikTok.*\n🔹 _Inténtalo más tarde._" 
-        }, { quoted: msg });
-
-        // ❌ Reacción de error
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "❌", key: msg.key } 
-        });
-    }
-    break;
         
 case 'geminis':
 case 'gemini': {
@@ -9384,6 +11006,8 @@ case 'gemini': {
     }
     break;
 }
+
+
 case 'simi':
 case 'simisimi': {
     const fetch = require('node-fetch');
@@ -9901,9 +11525,7 @@ case 'alaventa': {
     }
     break;
 }
-        
-
-        
+              
         
 case 'mascota': {
     try {
@@ -10175,74 +11797,7 @@ case 'compra': {
         });
     }
     break;
-}
-
-        
-        
-case 'gremio': {
-    try {
-        const rpgFile = "./rpg.json";
-
-        // 🔄 Enviar una única reacción antes de procesar
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "🏰", key: msg.key } // Emoji de castillo 🏰
-        });
-
-        // Verificar si el archivo RPG existe
-        if (!fs.existsSync(rpgFile)) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: "❌ *El gremio aún no tiene miembros.* Usa `"+global.prefix+"rpg <nombre> <edad>` para registrarte." 
-            }, { quoted: msg });
-            return;
-        }
-
-        // Cargar datos del gremio
-        let rpgData = JSON.parse(fs.readFileSync(rpgFile, "utf-8"));
-
-        if (!rpgData.usuarios || Object.keys(rpgData.usuarios).length === 0) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: "📜 *No hay miembros registrados en el Gremio Azura Ultra.*\nUsa `"+global.prefix+"rpg <nombre> <edad>` para unirte." 
-            }, { quoted: msg });
-            return;
-        }
-
-        let miembros = Object.values(rpgData.usuarios);
-        let listaMiembros = `🏰 *Gremio Azura Ultra - Miembros Registrados* 🏰\n\n`;
-
-        // Ordenar por nivel (de mayor a menor)
-        miembros.sort((a, b) => b.nivel - a.nivel);
-
-        // Construir la lista con los datos de cada usuario
-        miembros.forEach((usuario, index) => {
-            let numMascotas = usuario.mascotas ? usuario.mascotas.length : 0;
-            let numPersonajes = usuario.personajes ? usuario.personajes.length : 0;
-
-            listaMiembros += `══════════════════════\n`;
-            listaMiembros += `🔹 *${index + 1}.* ${usuario.nombre}\n`;
-            listaMiembros += `   🏅 *Rango:* ${usuario.rango}\n`;
-            listaMiembros += `   🎚️ *Nivel:* ${usuario.nivel}\n`;
-            listaMiembros += `   🎂 *Edad:* ${usuario.edad} años\n`;
-            listaMiembros += `   🐾 *Mascotas:* ${numMascotas}\n`;
-            listaMiembros += `   🎭 *Personajes:* ${numPersonajes}\n`;
-        });
-
-        listaMiembros += `══════════════════════\n🏆 *Total de miembros:* ${miembros.length}`;
-
-        // Enviar el video como GIF con el listado 📜
-        await sock.sendMessage(msg.key.remoteJid, { 
-            video: { url: "https://cdn.dorratz.com/files/1740565316697.mp4" }, 
-            gifPlayback: true, 
-            caption: listaMiembros
-        }, { quoted: msg });
-
-    } catch (error) {
-        console.error("❌ Error en el comando .gremio:", error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Hubo un error al obtener la lista del gremio. Inténtalo de nuevo.*" 
-        }, { quoted: msg });
-    }
-    break;
-}
+}        
         
 case 'rpg': { 
     try { 
@@ -10929,9 +12484,7 @@ case 'ok': {
     }
     break;
 }
-        
-
-     
+             
 
 case 'bal':
 case 'saldo': {
@@ -11197,8 +12750,8 @@ case 'tiendaper': {
         let mensaje = `🏪 *Tienda de Personajes - Azura Ultra* 🏪\n\n`;
         mensaje += `🎭 *Compra personajes de anime y mejora sus habilidades.*\n`;
         mensaje += `🛒 *Para comprar un personaje usa:* \n`;
-        mensaje += `   📌 \`${global.prefix}compra <nombre_personaje>\`\n`;
-        mensaje += `   📌 \`${global.prefix}compra <número_personaje>\`\n`;
+        mensaje += `   📌 \`${global.prefix}comprar <nombre_personaje>\`\n`;
+        mensaje += `   📌 \`${global.prefix}comprar <número_personaje>\`\n`;
         mensaje += `📜 Usa \`${global.prefix}menurpg\` para más información.\n\n`;
 
         // Crear la lista de personajes disponibles 📜
@@ -11652,77 +13205,6 @@ case "listpacks":
     }
     break;
 
-case "s":
-    try {
-        let quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-        if (!quoted) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: "⚠️ *Responde a una imagen o video con el comando `.s` para crear un sticker.*" 
-            }, { quoted: msg });
-            return;
-        }
-
-        let mediaType = quoted.imageMessage ? "image" : quoted.videoMessage ? "video" : null;
-        if (!mediaType) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: "⚠️ *Solo puedes convertir imágenes o videos en stickers.*" 
-            }, { quoted: msg });
-            return;
-        }
-
-        // Obtener el nombre del usuario
-        let senderName = msg.pushName || "Usuario Desconocido";
-
-        // Obtener la fecha exacta de creación 📅
-        let now = new Date();
-        let fechaCreacion = `📅 Fecha de Creación de Stickerz: ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()} 🕒 ${now.getHours()}:${now.getMinutes()}`;
-
-        // Mensaje de reacción mientras se crea el sticker ⚙️
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "🛠️", key: msg.key } 
-        });
-
-        let mediaStream = await downloadContentFromMessage(quoted[`${mediaType}Message`], mediaType);
-        let buffer = Buffer.alloc(0);
-        for await (const chunk of mediaStream) {
-            buffer = Buffer.concat([buffer, chunk]);
-        }
-
-        if (buffer.length === 0) {
-            throw new Error("❌ Error: No se pudo descargar el archivo.");
-        }
-
-        // 🌟 Formato llamativo para la metadata del sticker 🌟
-        let metadata = {
-            packname: `✨ Lo Mandó Hacer: ${senderName} ✨`,
-            author: `🤖 Bot Creador: Azura Ultra 2.0\n🛠️ Desarrollado por: 𝙍𝙪𝙨𝙨𝙚𝙡𝙡 xz💻\n${fechaCreacion}`
-        };
-
-        let stickerBuffer;
-        if (mediaType === "image") {
-            stickerBuffer = await writeExifImg(buffer, metadata);
-        } else {
-            stickerBuffer = await writeExifVid(buffer, metadata);
-        }
-
-        await sock.sendMessage(msg.key.remoteJid, { 
-            sticker: { url: stickerBuffer } 
-        }, { quoted: msg });
-
-        // Confirmación final con reacción ✅
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "✅", key: msg.key } 
-        });
-
-    } catch (error) {
-        console.error("❌ Error en el comando .ss:", error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Hubo un error al procesar el sticker. Inténtalo de nuevo.*" 
-        }, { quoted: msg });
-    }
-    break;
-            
-        
 case "sendpack":
     try {
         if (!args[0]) {
@@ -11987,57 +13469,15 @@ case "setprefix":
     break;
              
         
-case "rest":
-    try {
-        // Obtener el número del remitente
-        const senderNumber = (msg.key.participant || sender).replace("@s.whatsapp.net", "");
-
-        // Obtener el número del bot
-        const botNumber = sock.user.id.split(":")[0]; // Obtener el número del bot correctamente
-
-        // Verificar si el mensaje fue enviado por el bot o por un dueño autorizado
-        const isBotMessage = msg.key.fromMe; // True si el mensaje es del bot
-        if (!isOwner(senderNumber) && !isBotMessage) { 
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: "⛔ *Solo los dueños del bot o el bot mismo pueden reiniciar el servidor.*"
-            }, { quoted: msg });
-            return;
-        }
-
-        // 🟢 Enviar reacción antes de reiniciar
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: "🔄", key: msg.key } // Emoji de reinicio
-        });
-
-        // Enviar mensaje de confirmación
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: "🔄 *Reiniciando el servidor...* \nEspera unos segundos..."
-        }, { quoted: msg });
-
-        // Esperar unos segundos antes de reiniciar
-        setTimeout(() => {
-            process.exit(1); // Reiniciar el bot (depende de tu gestor de procesos)
-        }, 3000);
-
-    } catch (error) {
-        console.error("❌ Error en el comando rest:", error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Error al intentar reiniciar el servidor.*"
-        }, { quoted: msg });
-    }
-    break;
-
         
-case 'help':        
-case "info":
-    try {
-        // Reacción antes de enviar la información
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: "ℹ️", key: msg.key } 
-        });
+case 'help':
+case 'info':
+  try {
+    await sock.sendMessage(msg.key.remoteJid, {
+      react: { text: "ℹ️", key: msg.key }
+    });
 
-        // Construcción del mensaje con información del bot
-        const infoMessage = `╭─ *🤖 AZURA ULTRA 2.0 BOT* ─╮
+    const infoMessage = `╭─ *🤖 AZURA ULTRA* ─╮
 │ 🔹 *Prefijo actual:* ${global.prefix}
 │ 👑 *Dueño:* Russell xz
 │ 🛠️ *Bot desarrollado desde cero* con la ayuda de Chatgpt.
@@ -12054,93 +13494,31 @@ case "info":
 ├─〔 📜 *Menús y Comandos* 〕─
 │ 📌 Usa *${global.prefix}menu* para ver los comandos principales.  
 │ 📌 Usa *${global.prefix}allmenu* para ver todos los comandos disponibles.  
-│ 📌 Usa *${global.prefix}menu2* para ver los comandos de multimedia y guardado.  
+│ 📌 Usa *${global.prefix}menuaudio* para ver los comandos de multimedia y guardado.  
 ╰──────────────────╯`;
 
-        // Enviar el mensaje con GIF animado
-        await sock.sendMessage(msg.key.remoteJid, { 
-            video: { url: "https://cdn.dorratz.com/files/1740372626884.mp4" }, 
-            gifPlayback: true, // Esto hace que se reproduzca como GIF
-            caption: infoMessage
-        }, { quoted: msg });
+    await sock.sendMessage2(msg.key.remoteJid,
+  {
+    image: { url: "https://cdn.russellxz.click/6984cf1b.jpeg" }, 
+    caption: infoMessage 
+  },
+  msg 
+);
+    
 
-    } catch (error) {
-        console.error("❌ Error en el comando info:", error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Ocurrió un error al mostrar la información. Inténtalo de nuevo.*" 
-        }, { quoted: msg });
-    }
-    break;
+  } catch (error) {
+    console.error("Error en comando info:", error);
+    await sock.sendMessage2(
+      msg.key.remoteJid,
+      "❌ *Ocurrió un error al mostrar la información. Inténtalo de nuevo.*",
+      msg
+    );
+  }
+  break;
         
         
-case "menu2": {
-    try {
-        // Reacción antes de enviar el menú
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: "📂", key: msg.key } 
-        });
 
-        // Verificar si el archivo guar.json existe
-        if (!fs.existsSync("./guar.json")) {
-            return sock.sendMessage(
-                msg.key.remoteJid,
-                { text: "❌ *Error:* No hay multimedia guardado aún. Usa `.guar` para guardar algo primero." },
-                { quoted: msg }
-            );
-        }
-
-        // Leer archivo guar.json
-        let guarData = JSON.parse(fs.readFileSync("./guar.json", "utf-8"));
-        
-        let listaMensaje = `┏━━━━━━━━━━━━━━━┓
-┃  📂 *MENÚ DE MULTIMEDIA*  
-┃  🔑 *Palabras Clave Guardadas*  
-┗━━━━━━━━━━━━━━━┛
-
-📌 *¿Cómo recuperar un archivo guardado?*  
-Usa el comando:  
-➡️ _${global.prefix}g palabra_clave_  
-
-📂 *Lista de palabras clave guardadas:*  
-━━━━━━━━━━━━━━━━━━━\n`;
-
-        let claves = Object.keys(guarData);
-        
-        if (claves.length === 0) {
-            listaMensaje += "🚫 *No hay palabras clave guardadas.*\n";
-        } else {
-            claves.forEach((clave, index) => {
-                listaMensaje += `*${index + 1}.* ${clave}\n`;
-            });
-        }
-
-        listaMensaje += `\n━━━━━━━━━━━━━━━━━━━  
-📥 *Otros Comandos de Multimedia*  
-
-${global.prefix}guar → Guarda archivos con una clave.  
-${global.prefix}g → Recupera archivos guardados.  
-${global.prefix}kill → Elimina un archivo guardado.  
-
-💡 *Azura Ultra 2.0 sigue mejorando. Pronto más funciones.*  
-⚙️ *Desarrollado por Russell xz* 🚀`;
-
-        // Enviar el menú con video como GIF
-        await sock.sendMessage(msg.key.remoteJid, { 
-            video: { url: "https://cdn.dorratz.com/files/1740372045635.mp4" }, 
-            gifPlayback: true, // Esto hace que se reproduzca como GIF
-            caption: listaMensaje 
-        }, { quoted: msg });
-
-    } catch (error) {
-        console.error("❌ Error al enviar el menú2:", error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ *Ocurrió un error al mostrar el menú2. Inténtalo de nuevo.*" 
-        }, { quoted: msg });
-    }
-    break;
-}    
-
-case "ping":
+case "pong":
     try {
         const now = new Date();
         const options = { 
@@ -12187,7 +13565,7 @@ case "ping":
         // Enviar mensaje con imagen y detalles del servidor
         await sock.sendMessage(msg.key.remoteJid, {
             image: { url: "https://cdn.dorratz.com/files/1740372224017.jpg" }, 
-            caption: `🏓 *Pong! El bot está activo.*\n\n` +
+            caption: `🏓 *Ping! El bot está activo.*\n\n` +
                      `📅 *Fecha y hora actual:* ${formattedDate}\n\n` +
                      `🕒 *Tiempo Activo:* ${uptimeFormatted}\n\n` +
                      `💻 *Información del Servidor:*\n` +
@@ -12212,9 +13590,6 @@ case "ping":
         });
     }
     break;
-
-
-
             
 case "get": {
     try {
@@ -12332,83 +13707,116 @@ case "get": {
     
 case "ver": {
     try {
-        if (!msg.message.extendedTextMessage || 
-            !msg.message.extendedTextMessage.contextInfo || 
-            !msg.message.extendedTextMessage.contextInfo.quotedMessage) {
+        
+        const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+        if (!quoted) {
             return sock.sendMessage(
                 msg.key.remoteJid,
-                { text: "❌ *Error:* Debes responder a un mensaje de *ver una sola vez* (imagen, video o audio) para poder verlo nuevamente." },
+                { text: "❌ *Error:* Debes responder a una imagen, video o nota de voz para reenviarla." },
                 { quoted: msg }
             );
         }
 
-        const quotedMsg = msg.message.extendedTextMessage.contextInfo.quotedMessage;
-        let mediaType, mediaMessage;
+       
+        const unwrap = m => {
+            let node = m;
+            while (
+                node?.viewOnceMessage?.message          ||
+                node?.viewOnceMessageV2?.message        ||
+                node?.viewOnceMessageV2Extension?.message ||
+                node?.ephemeralMessage?.message
+            ) {
+                node =
+                    node.viewOnceMessage?.message            ||
+                    node.viewOnceMessageV2?.message          ||
+                    node.viewOnceMessageV2Extension?.message ||
+                    node.ephemeralMessage?.message           ||
+                    node;
+            }
+            return node;
+        };
+        const inner = unwrap(quoted);
 
-        if (quotedMsg.imageMessage?.viewOnce) {
-            mediaType = "image";
-            mediaMessage = quotedMsg.imageMessage;
-        } else if (quotedMsg.videoMessage?.viewOnce) {
-            mediaType = "video";
-            mediaMessage = quotedMsg.videoMessage;
-        } else if (quotedMsg.audioMessage?.viewOnce) {
+        
+        let mediaType, mediaMsg;
+        if (inner.imageMessage) {
+            mediaType = "image"; mediaMsg = inner.imageMessage;
+        } else if (inner.videoMessage) {
+            mediaType = "video"; mediaMsg = inner.videoMessage;
+        } else if (inner.audioMessage || inner.voiceMessage || inner.pttMessage) {
+            
             mediaType = "audio";
-            mediaMessage = quotedMsg.audioMessage;
+            mediaMsg  = inner.audioMessage || inner.voiceMessage || inner.pttMessage;
         } else {
             return sock.sendMessage(
                 msg.key.remoteJid,
-                { text: "❌ *Error:* Solo puedes usar este comando en mensajes de *ver una sola vez*." },
+                { text: "❌ *Error:* El mensaje citado no contiene un archivo compatible." },
                 { quoted: msg }
             );
         }
 
-        // Enviar reacción mientras procesa
+        
         await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: "⏳", key: msg.key } 
+            react: { text: "⏳", key: msg.key }
         });
 
-        // Descargar el multimedia de forma segura
-        const mediaStream = await new Promise(async (resolve, reject) => {
+        
+        const mediaBuffer = await (async () => {
             try {
-                const stream = await downloadContentFromMessage(mediaMessage, mediaType);
-                let buffer = Buffer.alloc(0);
-                for await (const chunk of stream) {
-                    buffer = Buffer.concat([buffer, chunk]);
-                }
-                resolve(buffer);
-            } catch (err) {
-                reject(null);
-            }
-        });
+                const stream = await downloadContentFromMessage(mediaMsg, mediaType);
+                let buf = Buffer.alloc(0);
+                for await (const chunk of stream) buf = Buffer.concat([buf, chunk]);
+                return buf;
+            } catch { return null; }
+        })();
 
-        if (!mediaStream || mediaStream.length === 0) {
-            await sock.sendMessage(msg.key.remoteJid, { text: "❌ *Error:* No se pudo descargar el archivo. Intenta de nuevo." }, { quoted: msg });
-            return;
+        if (!mediaBuffer?.length) {
+            return sock.sendMessage(
+                msg.key.remoteJid,
+                { text: "❌ *Error:* No se pudo descargar el archivo. Intenta de nuevo." },
+                { quoted: msg }
+            );
         }
 
-        // Enviar el archivo descargado al grupo o chat
-        let messageOptions = {
-            mimetype: mediaMessage.mimetype,
-        };
+        
+        const credit  = "> 🔓 Recuperado por:\n\`Azura Ultra`";
+        const opts    = { mimetype: mediaMsg.mimetype };
 
         if (mediaType === "image") {
-            messageOptions.image = mediaStream;
+            opts.image   = mediaBuffer;
+            opts.caption = credit;                
         } else if (mediaType === "video") {
-            messageOptions.video = mediaStream;
-        } else if (mediaType === "audio") {
-            messageOptions.audio = mediaStream;
+            opts.video   = mediaBuffer;
+            opts.caption = credit;               
+        } else { 
+            opts.audio   = mediaBuffer;
+            opts.ptt     = mediaMsg.ptt ?? true;  
+            if (mediaMsg.seconds) opts.seconds = mediaMsg.seconds; 
         }
 
-        await sock.sendMessage(msg.key.remoteJid, messageOptions, { quoted: msg });
+        await sock.sendMessage(msg.key.remoteJid, opts, { quoted: msg });
 
-        // Confirmar que el archivo ha sido enviado con éxito
+        
+        if (mediaType === "audio") {
+            await sock.sendMessage(
+                msg.key.remoteJid,
+                { text: credit },
+                { quoted: msg }
+            );
+        }
+
+        
         await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: "✅", key: msg.key } 
+            react: { text: "✅", key: msg.key }
         });
 
-    } catch (error) {
-        console.error("❌ Error en el comando ver:", error);
-        await sock.sendMessage(msg.key.remoteJid, { text: "❌ *Error:* No se pudo recuperar el mensaje de *ver una sola vez*. Inténtalo de nuevo." }, { quoted: msg });
+    } catch (err) {
+        console.error("❌ Error en comando ver:", err);
+        await sock.sendMessage(
+            msg.key.remoteJid,
+            { text: "❌ *Error:* Hubo un problema al procesar el archivo." },
+            { quoted: msg }
+        );
     }
     break;
 }
@@ -12723,99 +14131,7 @@ case 'g': {
     break;
 }
         
-case 'guar': {
-    if (!msg.message.extendedTextMessage || 
-        !msg.message.extendedTextMessage.contextInfo || 
-        !msg.message.extendedTextMessage.contextInfo.quotedMessage) {
-        return sock.sendMessage(
-            msg.key.remoteJid,
-            { text: "❌ *Error:* Debes responder a un multimedia (imagen, video, audio, sticker, etc.) con una palabra clave para guardarlo. 📂" },
-            { quoted: msg }
-        );
-    }
 
-    const saveKey = args.join(' ').trim().toLowerCase(); // Clave en minúsculas
-    if (!saveKey) {
-        return sock.sendMessage(
-            msg.key.remoteJid,
-            { text: "⚠️ *Aviso:* Escribe una palabra clave para guardar este multimedia. 📝" },
-            { quoted: msg }
-        );
-    }
-
-    // Verificar si el archivo guar.json existe, si no, crearlo
-    if (!fs.existsSync("./guar.json")) {
-        fs.writeFileSync("./guar.json", JSON.stringify({}, null, 2));
-    }
-
-    // Leer archivo guar.json
-    let guarData = JSON.parse(fs.readFileSync("./guar.json", "utf-8"));
-
-    // Verificar si la palabra clave ya existe
-    if (guarData[saveKey]) {
-        return sock.sendMessage(
-            msg.key.remoteJid,
-            { text: `⚠️ *Aviso:* La palabra clave *"${saveKey}"* ya está en uso. Usa otra diferente. ❌` },
-            { quoted: msg }
-        );
-    }
-
-    const quotedMsg = msg.message.extendedTextMessage.contextInfo.quotedMessage;
-    let mediaType, mediaMessage, fileExtension;
-
-    if (quotedMsg.imageMessage) {
-        mediaType = "image";
-        mediaMessage = quotedMsg.imageMessage;
-        fileExtension = "jpg";
-    } else if (quotedMsg.videoMessage) {
-        mediaType = "video";
-        mediaMessage = quotedMsg.videoMessage;
-        fileExtension = "mp4";
-    } else if (quotedMsg.audioMessage) {
-        mediaType = "audio";
-        mediaMessage = quotedMsg.audioMessage;
-        fileExtension = "mp3";
-    } else if (quotedMsg.stickerMessage) {
-        mediaType = "sticker";
-        mediaMessage = quotedMsg.stickerMessage;
-        fileExtension = "webp"; // Stickers son .webp
-    } else if (quotedMsg.documentMessage) {
-        mediaType = "document";
-        mediaMessage = quotedMsg.documentMessage;
-        fileExtension = mediaMessage.mimetype.split("/")[1] || "bin"; // Obtener la extensión real
-    } else {
-        return sock.sendMessage(
-            msg.key.remoteJid,
-            { text: "❌ *Error:* Solo puedes guardar imágenes, videos, audios, stickers y documentos. 📂" },
-            { quoted: msg }
-        );
-    }
-
-    // Descargar el multimedia
-    const mediaStream = await downloadContentFromMessage(mediaMessage, mediaType);
-    let mediaBuffer = Buffer.alloc(0);
-    for await (const chunk of mediaStream) {
-        mediaBuffer = Buffer.concat([mediaBuffer, chunk]);
-    }
-
-    // Guardar multimedia con la palabra clave y la información del usuario que lo guardó
-    guarData[saveKey] = {
-        buffer: mediaBuffer.toString("base64"), // Convertir a base64
-        mimetype: mediaMessage.mimetype,
-        extension: fileExtension,
-        savedBy: msg.key.participant || msg.key.remoteJid, // Número del usuario que guardó el archivo
-    };
-
-    // Escribir en guar.json
-    fs.writeFileSync("./guar.json", JSON.stringify(guarData, null, 2));
-
-    return sock.sendMessage(
-        msg.key.remoteJid,
-        { text: `✅ *Listo:* El multimedia se ha guardado con la palabra clave: *"${saveKey}"*. 🎉` },
-        { quoted: msg }
-    );
-}
-break;
         
                         
 
@@ -12887,155 +14203,81 @@ break;
             }
             break;
 
-        case "kick":
-            try {
-                if (!msg.key.remoteJid.includes("@g.us")) {
-                    return sock.sendMessage(msg.key.remoteJid, { text: "❌ *Este comando solo funciona en grupos.*" }, { quoted: msg });
-                }
+case "kick": {
+  try {
+    const chatId = msg.key.remoteJid;
+    const sender = (msg.key.participant || msg.participant || msg.key.remoteJid).replace(/[^0-9]/g, "");
+    const isGroup = chatId.endsWith("@g.us");
 
-                const chat = await sock.groupMetadata(msg.key.remoteJid);
-                const senderId = msg.key.participant.replace(/@s.whatsapp.net/, '');
-                const isOwner = global.owner.some(o => o[0] === senderId);
-                const groupAdmins = chat.participants.filter(p => p.admin);
-                const isAdmin = groupAdmins.some(admin => admin.id === msg.key.participant);
+    // Reacción inicial
+    await sock.sendMessage(chatId, { react: { text: "🛑", key: msg.key } });
 
-                if (!isAdmin && !isOwner) {
-                    return sock.sendMessage(
-                        msg.key.remoteJid,
-                        { text: "🚫 *No tienes permisos para expulsar a miembros del grupo.*\n⚠️ *Solo los administradores o el dueño del bot pueden usar este comando.*" },
-                        { quoted: msg }
-                    );
-                }
+    if (!isGroup) {
+      return await sock.sendMessage(chatId, { text: "❌ *Este comando solo funciona en grupos.*" }, { quoted: msg });
+    }
 
-                let userToKick = null;
+    const metadata = await sock.groupMetadata(chatId);
+    const groupAdmins = metadata.participants.filter(p => p.admin);
+    const isSenderAdmin = groupAdmins.some(p => p.id.includes(sender));
+    const isSenderOwner = isOwner(sender);
 
-                if (msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
-                    userToKick = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
-                }
+    if (!isSenderAdmin && !isSenderOwner) {
+      return await sock.sendMessage(chatId, {
+        text: "🚫 *Solo los administradores o el owner pueden expulsar miembros del grupo.*"
+      }, { quoted: msg });
+    }
 
-                if (!userToKick && msg.message.extendedTextMessage?.contextInfo?.participant) {
-                    userToKick = msg.message.extendedTextMessage.contextInfo.participant;
-                }
+    // Obtener usuario a expulsar
+    let userToKick = null;
 
-                if (!userToKick) {
-                    return sock.sendMessage(msg.key.remoteJid, { text: "⚠️ *Debes mencionar o responder a un usuario para expulsarlo.*" }, { quoted: msg });
-                }
+    if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
+      userToKick = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+    } else if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+      userToKick = msg.message.extendedTextMessage.contextInfo.participant;
+    }
 
-                await sock.groupParticipantsUpdate(msg.key.remoteJid, [userToKick], "remove");
+    if (!userToKick) {
+      return await sock.sendMessage(chatId, {
+        text: "⚠️ *Debes mencionar o responder al usuario que deseas expulsar.*"
+      }, { quoted: msg });
+    }
 
-                return sock.sendMessage(
-                    msg.key.remoteJid,
-                    { text: `🚷 *El usuario @${userToKick.split('@')[0]} ha sido expulsado del grupo.*`, mentions: [userToKick] },
-                    { quoted: msg }
-                );
+    const isTargetAdmin = groupAdmins.some(p => p.id === userToKick);
+    const botId = sock.user.id;
 
-            } catch (error) {
-                console.error('❌ Error en el comando kick:', error);
-                return sock.sendMessage(msg.key.remoteJid, { text: "❌ *Ocurrió un error al intentar expulsar al usuario.*" }, { quoted: msg });
-            }
-            break;
+    if (isTargetAdmin) {
+      return await sock.sendMessage(chatId, {
+        text: "❌ *No se puede expulsar a otro administrador.*"
+      }, { quoted: msg });
+    }
 
-case "instagram":
-case "ig":
-    if (!text) return sock.sendMessage(msg.key.remoteJid, { 
-        text: `Ejemplo de uso:\n${global.prefix + command} https://www.instagram.com/p/CCoI4DQBGVQ/` 
+    if (userToKick === botId) {
+      return await sock.sendMessage(chatId, {
+        text: "❌ *No puedo expulsarme a mí mismo.*"
+      }, { quoted: msg });
+    }
+
+    await sock.groupParticipantsUpdate(chatId, [userToKick], "remove");
+
+    await sock.sendMessage(chatId, {
+      text: `🚷 *El usuario @${userToKick.split("@")[0]} ha sido expulsado del grupo.*`,
+      mentions: [userToKick]
     }, { quoted: msg });
 
-    try {
-        // ⏳ Reacción de carga mientras se procesa
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '⏳', key: msg.key }
-        });
-
-        const axios = require('axios');
-        const apiUrl = `https://api.dorratz.com/igdl?url=${text}`;
-        const response = await axios.get(apiUrl);
-        const { data } = response.data;
-
-        if (!data || data.length === 0) {
-            return sock.sendMessage(msg.key.remoteJid, { 
-                text: "❌ No se pudo obtener el video de Instagram." 
-            });
-        }
-
-        // 📜 Construcción del mensaje con marca de agua
-        const caption = `🎬 *Video de Instagram*\n\n> 🍧Solicitud procesada por api.dorratz.com\n\n───────\n© Azura Ultra 2.0 Bot`;
-
-        // 📩 Enviar cada video descargado con la marca de agua
-        for (let item of data) {
-            await sock.sendMessage(msg.key.remoteJid, { 
-                video: { url: item.url }, 
-                caption: caption 
-            }, { quoted: msg });
-        }
-
-        // ✅ Confirmación con reacción de éxito
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "✅", key: msg.key } 
-        });
-
-    } catch (error) {
-        console.error(error);
-        await sock.sendMessage(msg.key.remoteJid, { 
-            text: "❌ Ocurrió un error al procesar el enlace de Instagram." 
-        }, { quoted: msg });
-    }
-    break;
-        
-
-        
-case "facebook":
-case "fb":
-    if (!text) return sock.sendMessage(msg.key.remoteJid, { 
-        text: `Ejemplo de uso:\n${global.prefix + command} https://fb.watch/ncowLHMp-x/` 
+  } catch (error) {
+    console.error("❌ Error en el comando kick:", error);
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: "❌ *Ocurrió un error al intentar expulsar al usuario.*"
     }, { quoted: msg });
-
-    if (!text.match(/www.facebook.com|fb.watch/g)) {
-        return sock.sendMessage(msg.key.remoteJid, {
-            text: `❌ Enlace de Facebook inválido.\nEjemplo de uso:\n${global.prefix + command} https://fb.watch/ncowLHMp-x/`
-        });
-    }
-
-    try {
-        // ⏳ Reacción de carga mientras se procesa
-        await sock.sendMessage(msg.key.remoteJid, {
-            react: { text: '⏳', key: msg.key }
-        });
-
-        const axios = require('axios');
-        const response = await axios.get(`https://api.dorratz.com/fbvideo?url=${encodeURIComponent(text)}`);
-        const results = response.data;
-
-        if (!results || results.length === 0) {
-            return sock.sendMessage(msg.key.remoteJid, { text: "❌ No se pudo obtener el video." });
-        }
-
-        // 📜 Construcción del mensaje con resoluciones disponibles
-        const message = `Resoluciones disponibles:\n${results.map((res) => `- ${res.resolution}`).join('\n')}\n\n🔥 Enviado en 720p\n\n> 🍧 Solicitud procesada por api.dorratz.com\n\n───────\n© Azura Ultra 2.0 Bot`;
-
-        // 📩 Enviar el video con la marca de agua
-        await sock.sendMessage(msg.key.remoteJid, {
-            video: { url: results[0].url }, // Se envía en 720p por defecto
-            caption: message
-        }, { quoted: msg });
-
-        // ✅ Confirmación con reacción de éxito
-        await sock.sendMessage(msg.key.remoteJid, { 
-            react: { text: "✅", key: msg.key } 
-        });
-
-    } catch (error) {
-        console.error(error);
-        await sock.sendMessage(msg.key.remoteJid, {
-            text: "❌ Ocurrió un error al procesar el enlace de Facebook."
-        });
-    }
-    break;
+  }
+  break;
+}
         
-
-        default:
-            break;
-    }
+    
+}
 }
 
+
+
 module.exports = { handleCommand };
+

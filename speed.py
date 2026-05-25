@@ -6,7 +6,7 @@
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
-#
+# 
 #         http://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
@@ -1708,17 +1708,17 @@ def csv_header(delimiter=','):
 
 
 def parse_args():
-    """Function to handle building and parsing of command line arguments"""
+    """Función para manejar la creación y análisis de argumentos de línea de comando."""
     description = (
-        'Command line interface for testing internet bandwidth using '
+        ' Interfaz de línea de comando para probar el ancho de banda de Internet usando '
         'speedtest.net.\n'
-        '------------------------------------------------------------'
-        '--------------\n'
+        '━━━━━━━━━━━━━━━━━━━━'
+        '━━━━━━\n'
         'https://github.com/sivel/speedtest-cli')
 
     parser = ArgParser(description=description)
-    # Give optparse.OptionParser an `add_argument` method for
-    # compatibility with argparse.ArgumentParser
+    # Proporcione a optparse.OptionParser un método `add_argument` para
+    # compatibilidad con argparse.ArgumentParser
     try:
         parser.add_argument = parser.add_option
     except AttributeError:
@@ -1888,14 +1888,14 @@ def shell():
             secure=args.secure
         )
     except (ConfigRetrievalError,) + HTTP_ERRORS:
-        printer('Cannot retrieve speedtest configuration', error=True)
+        printer(' No se puede recuperar la configuración de prueba de velocidad', error=True)
         raise SpeedtestCLIError(get_exception())
 
     if args.list:
         try:
             speedtest.get_servers()
         except (ServersRetrievalError,) + HTTP_ERRORS:
-            printer('Cannot retrieve speedtest server list', error=True)
+            printer(' No se puede recuperar la lista de servidores de prueba de velocidad', error=True)
             raise SpeedtestCLIError(get_exception())
 
         for _, servers in sorted(speedtest.servers.items()):
@@ -1910,21 +1910,21 @@ def shell():
                         raise
         sys.exit(0)
 
-    printer('_*< INFO - SPEEDTEST />*_\n\n', quiet)
+    printer('_•━≪ ＩＮＦＯ - ＳＰＥＥＤＴＥＳＴ ≫━•_\n', quiet)
 
 
     if not args.mini:
-        printer('▢ *Iniciando prueba...*', quiet)
-        printer('▢ *Buscando servidor...*', quiet)
+        printer('❥ *ɪɴɪᴄɪᴀɴᴅᴏ ᴘʀᴜᴇʙᴀ...*', quiet)
+        printer('❥ *ʙᴜsᴄᴀɴᴅᴏ sᴇʀᴠɪᴅᴏʀ...*', quiet)
         try:
             speedtest.get_servers(servers=args.server, exclude=args.exclude)
         except NoMatchedServers:
             raise SpeedtestCLIError(
-                '▢ *No hay servidores coincidentes:* %s' %
+                '❥ *ɴᴏ ʜᴀʏ sᴇʀᴠɪᴅᴏʀᴇs ᴄᴏɪɴᴄɪᴅᴇɴᴛᴇs:* %s' %
                 ', '.join('%s' % s for s in args.server)
             )
         except (ServersRetrievalError,) + HTTP_ERRORS:
-            printer('▢ *No se pudo obtener la lista de servidores.*', error=True)
+            printer('❥ *ɴᴏ sᴇ ᴘᴜᴅᴏ ᴏʙᴛᴇɴᴇʀ ʟᴀ ʟɪsᴛᴀ ᴅᴇ sᴇʀᴠɪᴅᴏʀᴇs.*', error=True)
             raise SpeedtestCLIError(get_exception())
         except InvalidServerIDType:
             raise SpeedtestCLIError(
@@ -1933,19 +1933,19 @@ def shell():
             )
 
         if args.server and len(args.server) == 1:
-            printer('▢ *Obteniendo info. del servidor...*', quiet)
+            printer('❥ *ᴏʙᴛᴇɴɪᴇɴᴅᴏ ɪɴғᴏ ᴅᴇʟ sᴇʀᴠɪᴅᴏʀ...*', quiet)
         else:
-            printer('▢ *Se selecionó el mejor servidor...*', quiet)
+            printer('❥ *sᴇ sᴇʟᴇᴄɪᴏɴᴏ́ ᴇʟ ᴍᴇᴊᴏʀ sᴇʀᴠɪᴅᴏʀ...*', quiet)
         speedtest.get_best_server()
     elif args.mini:
         speedtest.get_best_server(speedtest.set_mini_server(args.mini))
 
     results = speedtest.results
 
-    printer('\n▢ *ISP:* %(isp)s' % speedtest.config['client'],
+    printer('\n━━━━━━━━━━━━━━━━━━━━\n❥ *ɪsᴘ:* %(isp)s' % speedtest.config['client'],
             quiet)
-    printer('▢ *Servidor:* %(sponsor)s\n▢ *Ubicación:* %(name)s [%(d)0.2f km] '
-            '\n▢ *Latencia:* %(latency)s ms' % results.server, quiet)
+    printer('❥ *sᴇʀᴠɪᴅᴏʀ:* %(sponsor)s\n❥ *ᴜʙɪᴄᴀᴄɪᴏɴ:* %(name)s [%(d)0.2f km] '
+            '\n❥ *ʟᴀᴛᴇɴᴄɪᴀ:* %(latency)s ms' % results.server, quiet)
 
     if args.download:
         printer('', quiet,
@@ -1954,30 +1954,30 @@ def shell():
             callback=callback,
             threads=(None, 1)[args.single]
         )
-        printer('▢ *Descarga:* %0.2f M%s/s' %
+        printer('❥ *ᴅᴇsᴄᴀʀɢᴀ:* %0.2f M%s/s' %
                 ((results.download / 1000.0 / 1000.0) / args.units[1],
                  args.units[0]),
                 quiet)
     else:
-        printer('▢ *Omitiendo la prueba de descarga.*', quiet)
+        printer('❥ *ᴏᴍɪᴛɪᴇɴᴅᴏ ʟᴀ ᴘʀᴜᴇʙᴀ ᴅᴇ ᴅᴇsᴄᴀʀɢᴀ.*', quiet)
 
     if args.upload:
         speedtest.upload()
-        printer('▢ *Subida:* %0.2f M%s/s' %
+        printer('❥ *sᴜʙɪᴅᴀ:* %0.2f M%s/s' %
                 ((results.upload / 1000.0 / 1000.0) / args.units[1],
                  args.units[0]),
                 quiet)
 
     else:
-        printer('▢ *Omitiendo la prueba de subida.*', quiet)
+        printer('❥ *ᴏᴍɪᴛɪᴇɴᴅᴏ ʟᴀ ᴘʀᴜᴇʙᴀ ᴅᴇ sᴜʙɪᴅᴀ.*', quiet)
 
-    printer('▢ *Resultados:*\n%r' % results.dict(), debug=True)
+    printer('❥ *ʀᴇsᴜʟᴛᴀᴅᴏs:*\n%r' % results.dict(), debug=True)
 
     if not args.simple and args.share:
         results.share()
 
     if args.simple:
-        printer('▢ Latencia: %s ms\n▢ Descarga: %0.2f M%s/s\n\n▢ Subida: %0.2f M%s/s' %
+        printer('❥ ʟᴀᴛᴇɴᴄɪᴀ: %s ms\n❥ ᴅᴇsᴄᴀʀɢᴀʀ: %0.2f M%s/s\n\n❥ sᴜʙɪᴅᴀ: %0.2f M%s/s' %
                 (results.ping,
                  (results.download / 1000.0 / 1000.0) / args.units[1],
                  args.units[0],
@@ -1989,14 +1989,14 @@ def shell():
         printer(results.json())
 
     if args.share and not machine_format:
-        printer('\n▢ *Compartir resultado:* %s' % results.share())
+        printer('\n━━━━━━━━━━━━━━━━━━━━\n❥ *ᴄᴏᴍᴘᴀʀᴛɪʀ ʀᴇsᴜʟᴛᴀᴅᴏ:* %s' % results.share())
 
 
 def main():
     try:
         shell()
     except KeyboardInterrupt:
-        printer('\n▢ *Cancelando...*', error=True)
+        printer('\n❥ *ᴄᴀɴᴄᴇʟᴀɴᴅᴏ...*', error=True)
     except (SpeedtestException, SystemExit):
         e = get_exception()
         # Ignore a successful exit, or argparse exit
